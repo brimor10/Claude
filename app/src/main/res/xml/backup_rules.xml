@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  El monedero NUNCA se respalda.
+
+  Restaurar un respaldo del monedero es exactamente el ataque de doble gasto:
+  el usuario volveria a tener saldo que ya gasto. Ademas la clave privada vive
+  en el Keystore y no es exportable, asi que un respaldo restaurado en otro
+  telefono solo dejaria basura inservible.
+-->
+<full-backup-content>
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+</full-backup-content>

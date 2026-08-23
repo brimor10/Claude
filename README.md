@@ -1,0 +1,73 @@
+# Pana Pago — pago de transporte público que funciona sin internet
+
+Saldo prepago que se recarga **con** internet, queda bloqueado en el teléfono y
+se gasta **sin** internet mediante QR. El descuento ocurre en el momento, offline.
+Cuando vuelve la señal, todo se sincroniza y al dueño de la unidad se le paga en
+bolívares.
+
+## Estado del proyecto
+
+| Módulo | Qué es | Estado |
+|---|---|---|
+| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 32 pruebas** |
+| `:app` | App Android (Compose): modo pasajero y modo cobrador. | **Escrito, sin compilar** — ver aviso abajo |
+
+> **Aviso honesto:** el módulo `:app` se escribió pero **no se ha compilado ni
+> ejecutado nunca**. El entorno donde se desarrolló no tiene el SDK de Android y
+> `dl.google.com` está bloqueado por política de red, así que ni el SDK ni las
+> dependencias de AndroidX eran alcanzables. Espera errores de compilación al
+> abrirlo por primera vez en Android Studio. Toda la lógica de dinero y de
+> seguridad vive en `:core`, que sí está compilado y probado.
+
+## Cómo correr las pruebas
+
+```bash
+./gradlew :core:test
+```
+
+No hace falta el SDK de Android: `settings.gradle.kts` desactiva el módulo `:app`
+cuando no encuentra `ANDROID_HOME`, `ANDROID_SDK_ROOT` ni `sdk.dir` en
+`local.properties`. Con el SDK instalado, `./gradlew build` construye también la app.
+
+## El flujo, en cuatro pasos
+
+**1. Recargar (necesita internet).** El servidor cobra la recarga, retiene el
+dinero en garantía y le entrega al teléfono un **vale de saldo** firmado, amarrado
+a la clave de ese teléfono en concreto.
+
+**2. Pagar (sin internet).** El aparato de la unidad muestra un QR de cobro con un
+número de un solo uso que vence en 45 segundos. El pasajero lo escanea, su
+teléfono firma un **vale de gasto** y le muestra el QR resultante al cobrador.
+
+**3. Verificar (sin internet).** El cobrador escanea y verifica ahí mismo: que el
+saldo lo firmó el servidor, que el vale es de ese teléfono, que el pago responde
+a *su* cobro y que las cuentas cuadran. El saldo ya quedó descontado en el
+teléfono del pasajero.
+
+**4. Liquidar (cuando vuelve la señal).** Ambos suben lo suyo. El servidor
+reconcilia, detecta fraudes y le paga al dueño de la unidad en bolívares.
+
+## Documentación
+
+- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — cómo está armado y por qué.
+- [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) — modelo de amenazas, qué está resuelto
+  y qué **no** se puede resolver. Léelo antes de tomar decisiones de negocio.
+- [`docs/PENDIENTE.md`](docs/PENDIENTE.md) — lo que falta para producción.
+
+## Lo que hay que saber antes de seguir
+
+1. **El saldo fantasma está resuelto.** Nadie puede inventar saldo sin la clave
+   privada del emisor, que vive en el servidor (en producción, en un HSM).
+
+2. **El doble gasto offline no se puede impedir del todo, y quien diga lo
+   contrario está vendiendo humo.** Un teléfono rooteado puede restaurar un
+   respaldo y gastar dos veces. Lo que sí se hace: detectarlo con prueba
+   criptográfica firmada por el propio defraudador, bloquearlo, cobrarle, y
+   **acotar la pérdida máxima** con topes de gasto offline. Todo eso está
+   implementado y probado. Los detalles y los números están en
+   `docs/SEGURIDAD.md`.
+
+3. **Modo demostración.** Mientras no exista el servidor, la app arranca con un
+   backend interno cuya clave de emisor está escrita en el código. Sirve para
+   probar el flujo con dos teléfonos; **no sirve para dinero real** y la app lo
+   grita en pantalla.

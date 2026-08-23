@@ -1,6 +1,9 @@
 package ve.transporte.core.qr
 
 import ve.transporte.core.crypto.Base64Url
+import ve.transporte.core.protocol.FrameFormatException
+import ve.transporte.core.protocol.FrameReader
+import ve.transporte.core.protocol.FrameWriter
 import ve.transporte.core.protocol.PurseGrant
 import ve.transporte.core.protocol.SignedChallenge
 import ve.transporte.core.protocol.SignedGrant
@@ -9,56 +12,8 @@ import ve.transporte.core.protocol.SignedValidatorCert
 import ve.transporte.core.protocol.SpendToken
 import ve.transporte.core.protocol.ValidatorCert
 import ve.transporte.core.protocol.ValidatorChallenge
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
 
 class QrFormatException(message: String, cause: Throwable? = null) : Exception(message, cause)
-
-/** Escritor de trama de transporte: campos con prefijo de longitud. */
-private class FrameWriter {
-    private val out = ByteArrayOutputStream(512)
-    fun bytes(v: ByteArray) = apply {
-        out.write(ByteBuffer.allocate(4).putInt(v.size).array()); out.write(v)
-    }
-
-    fun str(v: String) = bytes(v.toByteArray(StandardCharsets.UTF_8))
-    fun long(v: Long) = bytes(ByteBuffer.allocate(8).putLong(v).array())
-    fun int(v: Int) = long(v.toLong())
-    fun build(): ByteArray = out.toByteArray()
-}
-
-private class FrameReader(private val buf: ByteArray) {
-    private var pos = 0
-
-    fun bytes(): ByteArray {
-        if (pos + 4 > buf.size) throw QrFormatException("trama truncada en el prefijo de longitud")
-        val len = ByteBuffer.wrap(buf, pos, 4).int
-        pos += 4
-        if (len < 0 || pos + len > buf.size) throw QrFormatException("longitud de campo invalida: $len")
-        val out = buf.copyOfRange(pos, pos + len)
-        pos += len
-        return out
-    }
-
-    fun str(): String = String(bytes(), StandardCharsets.UTF_8)
-
-    fun long(): Long {
-        val b = bytes()
-        if (b.size != 8) throw QrFormatException("entero mal formado (${b.size} bytes)")
-        return ByteBuffer.wrap(b).long
-    }
-
-    fun int(): Int {
-        val v = long()
-        if (v > Int.MAX_VALUE || v < Int.MIN_VALUE) throw QrFormatException("entero fuera de rango: $v")
-        return v.toInt()
-    }
-
-    fun end() {
-        if (pos != buf.size) throw QrFormatException("bytes sobrantes en la trama (${buf.size - pos})")
-    }
-}
 
 /**
  * Codificacion de los mensajes que viajan por QR.
@@ -72,6 +27,9 @@ object QrEnvelope {
     const val PREFIX = "PP1"
     const val TYPE_CHALLENGE = "CHL"
     const val TYPE_SPEND = "SPD"
+
+    /** Vale de saldo suelto: permite recargar en una taquilla que si tiene internet. */
+    const val TYPE_GRANT = "GRT"
 
     // -- Reto del validador -------------------------------------------------
 
@@ -110,8 +68,8 @@ object QrEnvelope {
             val certSig = r.bytes()
             r.end()
             SignedChallenge(challenge, sig, pub, SignedValidatorCert(cert, certSig))
-        } catch (e: QrFormatException) {
-            throw e
+        } catch (e: FrameFormatException) {
+            throw QrFormatException("reto ilegible: ${e.message}", e)
         } catch (e: Exception) {
             throw QrFormatException("reto ilegible", e)
         }
@@ -167,10 +125,45 @@ object QrEnvelope {
             val devicePub = r.bytes()
             r.end()
             SignedSpend(token, spendSig, SignedGrant(grant, grantSig), devicePub)
-        } catch (e: QrFormatException) {
-            throw e
+        } catch (e: FrameFormatException) {
+            throw QrFormatException("vale de gasto ilegible: ${e.message}", e)
         } catch (e: Exception) {
             throw QrFormatException("vale de gasto ilegible", e)
+        }
+    }
+
+    // -- Vale de saldo suelto ------------------------------------------------
+
+    fun encode(signed: SignedGrant): String {
+        val g = signed.grant
+        val frame = FrameWriter()
+            .str(g.grantId).str(g.walletId).str(g.deviceKeyFingerprint)
+            .long(g.amountCentimos).str(g.currency)
+            .long(g.issuedAtEpochSec).long(g.expiresAtEpochSec)
+            .long(g.offlineSpendCapCentimos).int(g.offlineTripCap)
+            .str(g.issuerKeyId).str(g.nonce)
+            .bytes(signed.signature)
+            .build()
+        return "$PREFIX:$TYPE_GRANT:${Base64Url.encode(frame)}"
+    }
+
+    fun decodeGrant(text: String): SignedGrant {
+        val r = FrameReader(payloadOf(text, TYPE_GRANT))
+        return try {
+            val grant = PurseGrant(
+                grantId = r.str(), walletId = r.str(), deviceKeyFingerprint = r.str(),
+                amountCentimos = r.long(), currency = r.str(),
+                issuedAtEpochSec = r.long(), expiresAtEpochSec = r.long(),
+                offlineSpendCapCentimos = r.long(), offlineTripCap = r.int(),
+                issuerKeyId = r.str(), nonce = r.str(),
+            )
+            val sig = r.bytes()
+            r.end()
+            SignedGrant(grant, sig)
+        } catch (e: FrameFormatException) {
+            throw QrFormatException("vale de saldo ilegible: ${e.message}", e)
+        } catch (e: Exception) {
+            throw QrFormatException("vale de saldo ilegible", e)
         }
     }
 

@@ -9,6 +9,7 @@ import java.security.PublicKey
 import java.security.SecureRandom
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
+import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
 
 /**
@@ -54,6 +55,10 @@ object Ec {
     /** Decodifica una clave publica en formato X.509 / SubjectPublicKeyInfo. */
     fun decodePublicKey(encoded: ByteArray): PublicKey =
         KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(encoded))
+
+    /** Decodifica una clave privada en formato PKCS#8. Solo para pruebas y demos. */
+    fun decodePrivateKey(encoded: ByteArray): PrivateKey =
+        KeyFactory.getInstance("EC").generatePrivate(PKCS8EncodedKeySpec(encoded))
 
     fun randomNonce(bytes: Int = 16): String {
         val b = ByteArray(bytes)
@@ -119,5 +124,16 @@ class JvmSigner(
 
     companion object {
         fun generate(keyId: String): JvmSigner = JvmSigner(keyId, Ec.generateKeyPair())
+
+        /**
+         * Reconstruye un firmante a partir de claves ya codificadas.
+         * Pensado para pruebas y para el modo demostracion: en produccion la
+         * clave del emisor vive en un HSM y nunca se materializa asi.
+         */
+        fun fromEncoded(keyId: String, pkcs8Private: ByteArray, x509Public: ByteArray): JvmSigner =
+            JvmSigner(
+                keyId,
+                KeyPair(Ec.decodePublicKey(x509Public), Ec.decodePrivateKey(pkcs8Private)),
+            )
     }
 }

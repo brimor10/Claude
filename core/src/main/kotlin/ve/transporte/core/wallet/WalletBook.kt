@@ -14,8 +14,11 @@ import ve.transporte.core.protocol.SignedSpend
  * Regla de consumo: primero el que vence antes (FEFO), para que al usuario no se
  * le caduque saldo teniendo otro mas nuevo sin tocar.
  */
-class WalletBook(private val engine: OfflineWallet) {
-    private val purses = mutableListOf<PurseState>()
+class WalletBook(
+    private val engine: OfflineWallet,
+    initialStates: List<PurseState> = emptyList(),
+) {
+    private val purses = initialStates.toMutableList()
 
     val deviceFingerprint: String get() = engine.deviceFingerprint
 
