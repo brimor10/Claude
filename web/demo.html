@@ -1,0 +1,1974 @@
+<title>Pana Pago</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground: #eff1ee;
+    --surface: #ffffff;
+    --surface-2: #f6f8f5;
+    --ink: #121c1b;
+    --ink-2: #4c5a56;
+    --line: #d3dad5;
+    --line-fuerte: #b6c0ba;
+    --accent: #0d6b60;
+    --accent-suave: #deece9;
+    --sobre-accent: #ffffff;
+    --signal: #a85c0b;
+    --signal-suave: #f7ead9;
+    --ok: #256b46;
+    --ok-suave: #dcece3;
+    --danger: #9c2016;
+    --danger-suave: #f6e0dd;
+    --sombra: 0 1px 2px rgba(18, 28, 27, .06), 0 8px 24px -16px rgba(18, 28, 27, .28);
+
+    --display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    --prosa: 'Newsreader', Georgia, 'Times New Roman', serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d1413;
+      --surface: #151f1d;
+      --surface-2: #1b2624;
+      --ink: #e4ebe8;
+      --ink-2: #94a39f;
+      --line: #253230;
+      --line-fuerte: #384945;
+      --accent: #43a89a;
+      --accent-suave: #15302c;
+      --sobre-accent: #05211d;
+      --signal: #dfa059;
+      --signal-suave: #33261696;
+      --ok: #5ab480;
+      --ok-suave: #12301f;
+      --danger: #e0776a;
+      --danger-suave: #34181499;
+      --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0d1413;
+    --surface: #151f1d;
+    --surface-2: #1b2624;
+    --ink: #e4ebe8;
+    --ink-2: #94a39f;
+    --line: #253230;
+    --line-fuerte: #384945;
+    --accent: #43a89a;
+    --accent-suave: #15302c;
+    --sobre-accent: #05211d;
+    --signal: #dfa059;
+    --signal-suave: #33261696;
+    --ok: #5ab480;
+    --ok-suave: #12301f;
+    --danger: #e0776a;
+    --danger-suave: #34181499;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--display);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .envoltorio { max-width: 1140px; margin: 0 auto; padding: 32px 20px 96px; }
+
+  /* ---------- encabezado ---------- */
+
+  .cabecera { display: flex; flex-wrap: wrap; gap: 20px 32px; align-items: flex-end; justify-content: space-between; padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+  .titulo { font-size: clamp(30px, 5vw, 46px); font-weight: 700; letter-spacing: -.025em; margin: 0; line-height: 1; text-wrap: balance; }
+  .subtitulo { font-family: var(--prosa); font-size: 17px; color: var(--ink-2); margin: 10px 0 0; max-width: 54ch; }
+  .aviso-demo { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--signal); border: 1px solid currentColor; border-radius: 2px; padding: 6px 10px; white-space: nowrap; }
+
+  /* ---------- barra de estado ---------- */
+
+  .estado { position: sticky; top: 0; z-index: 20; margin: 0 -20px 28px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; }
+  .estado::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--accent); transition: background .25s; }
+  body.sin-senal .estado::before { background: var(--signal); }
+  .medidor { display: flex; flex-direction: column; gap: 1px; }
+  .medidor dt { font-size: 10px; letter-spacing: .11em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+  .medidor dd { margin: 0; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .estado .crece { margin-left: auto; }
+
+  .senal { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; padding: 7px 13px; border-radius: 999px; border: 1px solid; cursor: pointer; background: var(--accent-suave); color: var(--accent); border-color: transparent; font-family: inherit; }
+  body.sin-senal .senal { background: var(--signal-suave); color: var(--signal); }
+  .senal .punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  body.sin-senal .senal .punto { background: none; box-shadow: inset 0 0 0 2px currentColor; }
+
+  /* ---------- retícula ---------- */
+
+  .rejilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .rejilla { grid-template-columns: minmax(0, 1fr); } }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--sombra); overflow: hidden; }
+  .panel > header { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .panel h2 { margin: 0; font-size: 13px; letter-spacing: .11em; text-transform: uppercase; font-weight: 700; }
+  .panel .rotulo { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .panel .cuerpo { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ---------- pantalla del aparato ---------- */
+
+  .pantalla { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; min-height: 268px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 18px; text-align: center; }
+  .pantalla canvas { width: 100%; max-width: 226px; height: auto; image-rendering: pixelated; border-radius: 2px; background: #fff; padding: 6px; }
+  .pantalla .vacio { font-family: var(--prosa); color: var(--ink-2); font-size: 15px; max-width: 30ch; }
+  .pantalla .pie { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+  .pantalla .monto { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+
+  .veredicto { width: 100%; border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+  .veredicto.ok { background: var(--ok-suave); color: var(--ok); }
+  .veredicto.aviso { background: var(--signal-suave); color: var(--signal); }
+  .veredicto.mal { background: var(--danger-suave); color: var(--danger); }
+  .veredicto strong { font-size: 15px; letter-spacing: .02em; }
+  .veredicto span { font-family: var(--prosa); font-size: 14px; color: inherit; opacity: .88; }
+
+  /* ---------- controles ---------- */
+
+  .botones { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { font-family: var(--display); font-size: 14px; font-weight: 600; padding: 10px 15px; border-radius: 4px; border: 1px solid var(--line-fuerte); background: var(--surface); color: var(--ink); cursor: pointer; transition: background .15s, border-color .15s, transform .06s; }
+  button:hover:not(:disabled) { border-color: var(--ink-2); background: var(--surface-2); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button.principal { background: var(--accent); border-color: var(--accent); color: var(--sobre-accent); }
+  button.principal:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+  button:disabled { opacity: .38; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; }
+  .campo { display: flex; flex-direction: column; gap: 5px; }
+  .campo label { font-size: 10px; letter-spacing: .11em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+  .campo input { font-family: var(--mono); font-size: 15px; padding: 9px 11px; border-radius: 4px; border: 1px solid var(--line-fuerte); background: var(--surface); color: var(--ink); width: 100%; }
+  .campo .nota { font-family: var(--prosa); font-size: 13px; color: var(--ink-2); }
+  .campo .nota.alerta { color: var(--danger); font-weight: 500; }
+
+  /* ---------- prosa ---------- */
+
+  .nota-larga { font-family: var(--prosa); font-size: 16px; color: var(--ink-2); max-width: 68ch; }
+  .nota-larga strong { color: var(--ink); font-weight: 500; }
+
+  /* ---------- ataques ---------- */
+
+  .ataques { margin-top: 20px; }
+  .ataques .cuerpo { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 12px; }
+  .ataque { text-align: left; padding: 14px; display: flex; flex-direction: column; gap: 5px; height: 100%; }
+  .ataque b { font-size: 14px; font-weight: 600; }
+  .ataque em { font-family: var(--prosa); font-style: normal; font-size: 13.5px; color: var(--ink-2); font-weight: 400; line-height: 1.4; }
+
+  /* ---------- bitácora ---------- */
+
+  .bitacora { margin-top: 20px; }
+  .bitacora .cuerpo { padding: 0; }
+  .lineas { max-height: 340px; overflow-y: auto; overflow-x: auto; }
+  .linea { display: grid; grid-template-columns: 62px 106px minmax(0, 1fr); gap: 14px; padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 13.5px; align-items: baseline; }
+  .linea:last-child { border-bottom: 0; }
+  .linea .t { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .linea .quien { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; }
+  .linea .quien.servidor { color: var(--accent); }
+  .linea .quien.pasajero { color: var(--ink); }
+  .linea .quien.validador { color: var(--ink); }
+  .linea .quien.ataque { color: var(--danger); }
+  .linea .que { min-width: 0; }
+  .linea .que code { font-family: var(--mono); font-size: 12px; color: var(--ink-2); word-break: break-all; display: block; margin-top: 2px; }
+  .linea.destacada { background: var(--accent-suave); }
+  .linea.mala { background: var(--danger-suave); }
+
+  /* ---------- liquidación ---------- */
+
+  .liquidacion table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .liquidacion td { padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .liquidacion td:last-child { text-align: right; font-weight: 600; }
+  .liquidacion tr:last-child td { border-bottom: 0; font-size: 19px; padding-top: 14px; }
+
+  .pie-pagina { margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--line); font-family: var(--prosa); font-size: 14.5px; color: var(--ink-2); max-width: 72ch; }
+  .pie-pagina p { margin: 0 0 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="envoltorio">
+
+  <header class="cabecera">
+    <div>
+      <h1 class="titulo">Pana&nbsp;Pago</h1>
+      <p class="subtitulo">Pago de pasaje que funciona sin internet. Recargas con señal, el saldo queda bloqueado en el teléfono, y se gasta por QR aunque no haya datos. Aquí puedes operarlo tú mismo, y tratar de robarlo.</p>
+    </div>
+    <span class="aviso-demo">Demostración · claves de juguete</span>
+  </header>
+
+  <dl class="estado">
+    <button class="senal" id="btn-senal" type="button" aria-live="polite">
+      <span class="punto" aria-hidden="true"></span><span id="txt-senal">Con internet</span>
+    </button>
+    <div class="medidor"><dt>Saldo del pasajero</dt><dd id="m-saldo">0,00 Bs</dd></div>
+    <div class="medidor"><dt>Gastable sin señal</dt><dd id="m-offline">0,00 Bs</dd></div>
+    <div class="medidor"><dt>Viajes sin sincronizar</dt><dd id="m-pendientes">0</dd></div>
+    <div class="medidor crece"><dt>Acumulado del cobrador</dt><dd id="m-acumulado">0,00 Bs</dd></div>
+  </dl>
+
+  <section class="panel" style="margin-bottom:20px">
+    <header><h2>Parámetros</h2><span class="rotulo">Se aplican a la próxima recarga</span></header>
+    <div class="cuerpo">
+      <div class="campos">
+        <div class="campo">
+          <label for="in-pasaje">Pasaje (Bs)</label>
+          <input id="in-pasaje" type="text" inputmode="decimal" value="235.00">
+          <span class="nota" id="nota-pasaje"></span>
+        </div>
+        <div class="campo">
+          <label for="in-recarga">Recarga (Bs)</label>
+          <input id="in-recarga" type="text" inputmode="decimal" value="5000.00">
+          <span class="nota">Lo que el usuario mete cuando tiene señal.</span>
+        </div>
+        <div class="campo">
+          <label for="in-tope">Tope sin sincronizar (Bs)</label>
+          <input id="in-tope" type="text" inputmode="decimal" value="2350.00">
+          <span class="nota" id="nota-tope"></span>
+        </div>
+        <div class="campo">
+          <label for="in-viajes">Tope de viajes sin sincronizar</label>
+          <input id="in-viajes" type="text" inputmode="numeric" value="30">
+          <span class="nota">El que se agote primero manda.</span>
+        </div>
+      </div>
+      <p class="nota-larga">El tope sin sincronizar es <strong>la pérdida máxima</strong> que puede causar un teléfono comprometido antes de que el sistema lo bloquee. Bajarlo reduce el riesgo y molesta más a quien anda sin señal; subirlo hace lo contrario. Es la perilla del negocio, y por eso está aquí arriba.</p>
+      <div class="botones">
+        <button class="principal" id="btn-recargar" type="button">Recargar saldo</button>
+        <button id="btn-sincronizar" type="button">Sincronizar</button>
+        <button id="btn-reiniciar" type="button">Empezar de nuevo</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="rejilla">
+    <section class="panel">
+      <header><h2>Teléfono del pasajero</h2><span class="rotulo" id="rot-pasajero">María</span></header>
+      <div class="cuerpo">
+        <div class="pantalla" id="pantalla-pasajero">
+          <p class="vacio">Sin saldo todavía. Recarga arriba, con internet.</p>
+        </div>
+        <div class="botones">
+          <button class="principal" id="btn-pagar" type="button" disabled>Escanear el QR del cobrador y pagar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header><h2>Validador de la unidad</h2><span class="rotulo" id="rot-validador">bus-14 · don Enrique</span></header>
+      <div class="cuerpo">
+        <div class="pantalla" id="pantalla-validador">
+          <p class="vacio">Listo para cobrar. Genera un QR de cobro.</p>
+        </div>
+        <div class="botones">
+          <button class="principal" id="btn-cobrar" type="button">Cobrar pasaje</button>
+          <button id="btn-leer" type="button" disabled>Leer el pago</button>
+          <button id="btn-subir" type="button" disabled>Subir recibos</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel ataques">
+    <header><h2>Trata de robarlo</h2><span class="rotulo">Cada botón ejecuta el ataque de verdad</span></header>
+    <div class="cuerpo">
+      <button class="ataque" id="atq-saldo" type="button">
+        <b>Inventar saldo</b>
+        <em>Fabricar un vale de 100.000 Bs firmándolo con una clave propia, haciéndose pasar por el emisor.</em>
+      </button>
+      <button class="ataque" id="atq-pantallazo" type="button">
+        <b>Pagar con un pantallazo</b>
+        <em>Guardar el QR de un pago que ya se hizo y volver a mostrarlo en el siguiente viaje.</em>
+      </button>
+      <button class="ataque" id="atq-doble" type="button">
+        <b>Restaurar un respaldo</b>
+        <em>Copiar el monedero antes de pagar, gastar en un autobús, restaurar y gastar lo mismo en otro.</em>
+      </button>
+      <button class="ataque" id="atq-cobrador" type="button">
+        <b>Cobrador falso</b>
+        <em>Pegar en la pared un QR de cobro hecho por cualquiera, para cobrar pasajes sin prestar el servicio.</em>
+      </button>
+    </div>
+  </section>
+
+  <section class="panel bitacora">
+    <header><h2>Bitácora del protocolo</h2><span class="rotulo" id="rot-bitacora">0 eventos</span></header>
+    <div class="cuerpo"><div class="lineas" id="lineas"></div></div>
+  </section>
+
+  <section class="panel liquidacion" style="margin-top:20px">
+    <header><h2>Lo que cobra el dueño de la unidad</h2><span class="rotulo">Se paga en bolívares</span></header>
+    <div class="cuerpo">
+      <table>
+        <tbody>
+          <tr><td>Pasajes cobrados y subidos</td><td id="liq-pasajes">0</td></tr>
+          <tr><td>Bruto</td><td id="liq-bruto">0,00 Bs</td></tr>
+          <tr><td>Comisión del operador (3%)</td><td id="liq-comision">0,00 Bs</td></tr>
+          <tr><td>A pagar a don Enrique</td><td id="liq-neto">0,00 Bs</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="pie-pagina">
+    <p><strong>Esto no es una maqueta.</strong> Los QR de esta página son códigos reales, generados con un codificador verificado contra la biblioteca <em>segno</em> en las 40 versiones y leído sin fallos por <em>zxing-cpp</em>, el mismo motor que usan los teléfonos Android. Puedes apuntarle con la cámara.</p>
+    <p>Las firmas son ECDSA P-256 con SHA-256 hechas con la criptografía del navegador, y la serialización es idéntica byte a byte a la de la app en Kotlin: hay una prueba automática que toma un escenario firmado aquí y lo valida con el código de producción.</p>
+    <p>Lo único de mentira es el emisor: en esta página vive dentro del navegador y su clave privada es pública. En producción esa clave va en un HSM y nadie la ve.</p>
+  </footer>
+</div>
+
+<script type="module">
+// ===== web/qr.js =====
+// Generador de codigos QR: modo byte, nivel de correccion M.
+//
+// Escrito a mano porque la pagina se publica autocontenida (sin CDN ni npm en
+// tiempo de ejecucion) y porque las bibliotecas que se probaron producian
+// codigos ilegibles en algunas versiones.
+//
+// La correccion NO se da por supuesta: tools/verificar-qr.py compara esta
+// salida contra la biblioteca segno forzando LAS OCHO mascaras, y ademas
+// decodifica el resultado con OpenCV, que es lo que de verdad importa.
+//
+// Algoritmo segun ISO/IEC 18004. "QR Code" es marca registrada de DENSO WAVE.
+
+// [codewords de correccion por bloque, bloques g1, datos g1, bloques g2, datos g2]
+const EC_TABLE_M = [
+  [10, 1, 16, 0, 0], [16, 1, 28, 0, 0], [26, 1, 44, 0, 0], [18, 2, 32, 0, 0],
+  [24, 2, 43, 0, 0], [16, 4, 27, 0, 0], [18, 4, 31, 0, 0], [22, 2, 38, 2, 39],
+  [22, 3, 36, 2, 37], [26, 4, 43, 1, 44], [30, 1, 50, 4, 51], [22, 6, 36, 2, 37],
+  [22, 8, 37, 1, 38], [24, 4, 40, 5, 41], [24, 5, 41, 5, 42], [28, 7, 45, 3, 46],
+  [28, 10, 46, 1, 47], [26, 9, 43, 4, 44], [26, 3, 44, 11, 45], [26, 3, 41, 13, 42],
+  [26, 17, 42, 0, 0], [28, 17, 46, 0, 0], [28, 4, 47, 14, 48], [28, 6, 45, 14, 46],
+  [28, 8, 47, 13, 48], [28, 19, 46, 4, 47], [28, 22, 45, 3, 46], [28, 3, 45, 23, 46],
+  [28, 21, 45, 7, 46], [28, 19, 47, 10, 48], [28, 2, 46, 29, 47], [28, 10, 46, 23, 47],
+  [28, 14, 46, 21, 47], [28, 14, 46, 23, 47], [28, 12, 47, 26, 48], [28, 6, 47, 34, 48],
+  [28, 29, 46, 14, 47], [28, 13, 46, 32, 47], [28, 40, 47, 7, 48], [28, 18, 47, 31, 48],
+];
+
+const PENALTY_N1 = 3;
+const PENALTY_N2 = 3;
+const PENALTY_N3 = 40;
+const PENALTY_N4 = 10;
+
+// --- GF(256) para Reed-Solomon ----------------------------------------------
+
+const EXP = new Uint8Array(512);
+const LOG = new Uint8Array(256);
+(() => {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    EXP[i] = x;
+    LOG[x] = i;
+    x = (x << 1) ^ (x & 0x80 ? 0x11d : 0);
+    x &= 0xff;
+  }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+})();
+
+const gfMul = (a, b) => (a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]]);
+
+/** Coeficientes del polinomio generador, sin el termino principal (que es 1). */
+function rsDivisor(degree) {
+  const result = new Uint8Array(degree);
+  result[degree - 1] = 1;
+  let root = 1;
+  for (let i = 0; i < degree; i++) {
+    for (let j = 0; j < degree; j++) {
+      result[j] = gfMul(result[j], root);
+      if (j + 1 < degree) result[j] ^= result[j + 1];
+    }
+    root = gfMul(root, 0x02);
+  }
+  return result;
+}
+
+function rsRemainder(data, divisor) {
+  const result = new Uint8Array(divisor.length);
+  for (const b of data) {
+    const factor = b ^ result[0];
+    result.copyWithin(0, 1);
+    result[result.length - 1] = 0;
+    for (let i = 0; i < divisor.length; i++) result[i] ^= gfMul(divisor[i], factor);
+  }
+  return result;
+}
+
+// --- Datos -------------------------------------------------------------------
+
+const dataCapacity = (version) => {
+  const [, b1, d1, b2, d2] = EC_TABLE_M[version - 1];
+  return b1 * d1 + b2 * d2;
+};
+
+const countBitsFor = (version) => (version <= 9 ? 8 : 16);
+
+function pickVersion(byteLength) {
+  for (let v = 1; v <= 40; v++) {
+    if (dataCapacity(v) * 8 >= 4 + countBitsFor(v) + byteLength * 8) return v;
+  }
+  throw new Error('el contenido no cabe en un codigo QR');
+}
+
+function dataCodewords(bytes, version) {
+  const bits = [];
+  const push = (value, length) => {
+    for (let i = length - 1; i >= 0; i--) bits.push((value >>> i) & 1);
+  };
+
+  push(0b0100, 4); // indicador de modo byte
+  push(bytes.length, countBitsFor(version));
+  for (const b of bytes) push(b, 8);
+
+  const capacityBits = dataCapacity(version) * 8;
+  push(0, Math.min(4, capacityBits - bits.length)); // terminador
+  while (bits.length % 8 !== 0) bits.push(0);
+
+  const words = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j];
+    words.push(byte);
+  }
+  for (let pad = 0xec; words.length < dataCapacity(version); pad ^= 0xec ^ 0x11) {
+    words.push(pad);
+  }
+  return words;
+}
+
+/** Reparte en bloques, calcula la correccion de errores y entrelaza. */
+function addEccAndInterleave(words, version) {
+  const [ecLen, b1, d1, b2, d2] = EC_TABLE_M[version - 1];
+  const divisor = rsDivisor(ecLen);
+
+  const blocks = [];
+  let offset = 0;
+  for (let i = 0; i < b1 + b2; i++) {
+    const len = i < b1 ? d1 : d2;
+    const dat = words.slice(offset, offset + len);
+    offset += len;
+    blocks.push({ dat, ecc: rsRemainder(dat, divisor) });
+  }
+
+  const out = [];
+  const maxData = Math.max(d1, b2 > 0 ? d2 : 0);
+  for (let i = 0; i < maxData; i++) {
+    for (const block of blocks) if (i < block.dat.length) out.push(block.dat[i]);
+  }
+  for (let i = 0; i < ecLen; i++) {
+    for (const block of blocks) out.push(block.ecc[i]);
+  }
+  return out;
+}
+
+// --- Matriz ------------------------------------------------------------------
+
+function alignmentPositions(version) {
+  if (version === 1) return [];
+  const count = Math.floor(version / 7) + 2;
+  const step = version === 32 ? 26 : Math.ceil((version * 4 + 17 - 13) / (count * 2 - 2)) * 2;
+  const result = [6];
+  for (let pos = version * 4 + 17 - 7; result.length < count; pos -= step) result.splice(1, 0, pos);
+  return result;
+}
+
+class Canvas {
+  constructor(version) {
+    this.version = version;
+    this.size = version * 4 + 17;
+    this.modules = Array.from({ length: this.size }, () => new Uint8Array(this.size));
+    this.isFunction = Array.from({ length: this.size }, () => new Uint8Array(this.size));
+  }
+
+  set(row, col, dark) {
+    this.modules[row][col] = dark ? 1 : 0;
+    this.isFunction[row][col] = 1;
+  }
+
+  inside(row, col) {
+    return row >= 0 && row < this.size && col >= 0 && col < this.size;
+  }
+
+  drawFunctionPatterns() {
+    for (let i = 0; i < this.size; i++) {
+      this.set(6, i, i % 2 === 0);
+      this.set(i, 6, i % 2 === 0);
+    }
+    // Localizadores (con su separador): los pinta encima del sincronismo.
+    for (const [row, col] of [[3, 3], [3, this.size - 4], [this.size - 4, 3]]) {
+      for (let dr = -4; dr <= 4; dr++) {
+        for (let dc = -4; dc <= 4; dc++) {
+          const dist = Math.max(Math.abs(dr), Math.abs(dc));
+          if (this.inside(row + dr, col + dc)) {
+            this.set(row + dr, col + dc, dist !== 2 && dist !== 4);
+          }
+        }
+      }
+    }
+    // Patrones de alineacion, saltando los que chocan con los localizadores.
+    const pos = alignmentPositions(this.version);
+    for (let i = 0; i < pos.length; i++) {
+      for (let j = 0; j < pos.length; j++) {
+        const esquina = (i === 0 && j === 0) ||
+          (i === 0 && j === pos.length - 1) ||
+          (i === pos.length - 1 && j === 0);
+        if (esquina) continue;
+        for (let dr = -2; dr <= 2; dr++) {
+          for (let dc = -2; dc <= 2; dc++) {
+            this.set(pos[i] + dr, pos[j] + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+          }
+        }
+      }
+    }
+    // Mascara provisional: sirve para marcar como funcion las celdas de formato.
+    this.drawFormatBits(0);
+    this.drawVersion();
+  }
+
+  drawFormatBits(mask) {
+    const data = (0b00 << 3) | mask; // 00 = nivel M
+    let rem = data;
+    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const bits = ((data << 10) | rem) ^ 0x5412;
+    const bit = (i) => (bits >>> i) & 1;
+
+    // Primera copia, junto al localizador superior izquierdo.
+    for (let i = 0; i <= 5; i++) this.set(i, 8, bit(i));
+    this.set(7, 8, bit(6));
+    this.set(8, 8, bit(7));
+    this.set(8, 7, bit(8));
+    for (let i = 9; i < 15; i++) this.set(8, 14 - i, bit(i));
+
+    // Segunda copia, repartida entre los otros dos localizadores.
+    for (let i = 0; i < 8; i++) this.set(8, this.size - 1 - i, bit(i));
+    for (let i = 8; i < 15; i++) this.set(this.size - 15 + i, 8, bit(i));
+
+    // Modulo siempre oscuro: va al final porque pisa un bit de la segunda copia.
+    this.set(this.size - 8, 8, true);
+  }
+
+  drawVersion() {
+    if (this.version < 7) return;
+    let rem = this.version;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+    const bits = (this.version << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const dark = ((bits >>> i) & 1) !== 0;
+      const a = this.size - 11 + (i % 3);
+      const b = Math.floor(i / 3);
+      this.set(a, b, dark);
+      this.set(b, a, dark);
+    }
+  }
+
+  drawCodewords(words) {
+    let i = 0;
+    const totalBits = words.length * 8;
+    for (let right = this.size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5; // la columna 6 es de sincronismo
+      for (let vert = 0; vert < this.size; vert++) {
+        for (let j = 0; j < 2; j++) {
+          const col = right - j;
+          const upward = ((right + 1) & 2) === 0;
+          const row = upward ? this.size - 1 - vert : vert;
+          if (!this.isFunction[row][col] && i < totalBits) {
+            this.modules[row][col] = (words[i >>> 3] >>> (7 - (i & 7))) & 1;
+            i++;
+          }
+        }
+      }
+    }
+  }
+
+  /** La mascara es su propia inversa: aplicarla dos veces la deshace. */
+  applyMask(mask) {
+    for (let row = 0; row < this.size; row++) {
+      for (let col = 0; col < this.size; col++) {
+        if (this.isFunction[row][col]) continue;
+        let invert;
+        switch (mask) {
+          case 0: invert = (col + row) % 2 === 0; break;
+          case 1: invert = row % 2 === 0; break;
+          case 2: invert = col % 3 === 0; break;
+          case 3: invert = (col + row) % 3 === 0; break;
+          case 4: invert = (Math.floor(col / 3) + Math.floor(row / 2)) % 2 === 0; break;
+          case 5: invert = ((col * row) % 2) + ((col * row) % 3) === 0; break;
+          case 6: invert = (((col * row) % 2) + ((col * row) % 3)) % 2 === 0; break;
+          case 7: invert = (((col + row) % 2) + ((col * row) % 3)) % 2 === 0; break;
+          default: throw new Error('mascara invalida');
+        }
+        if (invert) this.modules[row][col] ^= 1;
+      }
+    }
+  }
+
+  penalty() {
+    let result = 0;
+    const size = this.size;
+
+    const addHistory = (run, history) => {
+      if (history[0] === 0) run += size; // borde claro implicito al inicio
+      history.pop();
+      history.unshift(run);
+    };
+    const countPatterns = (h) => {
+      const n = h[1];
+      const core = n > 0 && h[2] === n && h[3] === n * 3 && h[4] === n && h[5] === n;
+      return (core && h[0] >= n * 4 && h[6] >= n ? 1 : 0) +
+        (core && h[6] >= n * 4 && h[0] >= n ? 1 : 0);
+    };
+    const terminate = (color, run, history) => {
+      if (color) {
+        addHistory(run, history);
+        run = 0;
+      }
+      addHistory(run + size, history);
+      return countPatterns(history);
+    };
+
+    for (const porFilas of [true, false]) {
+      for (let i = 0; i < size; i++) {
+        const at = (j) => (porFilas ? this.modules[i][j] : this.modules[j][i]);
+        const history = [0, 0, 0, 0, 0, 0, 0];
+        let color = 0;
+        let run = 0;
+        for (let j = 0; j < size; j++) {
+          if (at(j) === color) {
+            run++;
+            if (run === 5) result += PENALTY_N1;
+            else if (run > 5) result++;
+          } else {
+            addHistory(run, history);
+            if (!color) result += countPatterns(history) * PENALTY_N3;
+            color = at(j);
+            run = 1;
+          }
+        }
+        result += terminate(color, run, history) * PENALTY_N3;
+      }
+    }
+
+    for (let row = 0; row < size - 1; row++) {
+      for (let col = 0; col < size - 1; col++) {
+        const v = this.modules[row][col];
+        if (v === this.modules[row][col + 1] &&
+          v === this.modules[row + 1][col] &&
+          v === this.modules[row + 1][col + 1]) {
+          result += PENALTY_N2;
+        }
+      }
+    }
+
+    let dark = 0;
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) dark += this.modules[row][col];
+    }
+    const total = size * size;
+    const k = Math.ceil(Math.abs(dark * 20 - total * 10) / total) - 1;
+    return result + k * PENALTY_N4;
+  }
+}
+
+// Se exportan para que las herramientas de verificacion puedan inspeccionar
+// los pasos intermedios, no para uso general.
+const _internos = { dataCodewords, addEccAndInterleave, pickVersion, dataCapacity, countBitsFor };
+
+/**
+ * @param {string} text
+ * @param {number|null} forcedMask mascara fija (0-7); null para elegir la mejor.
+ * @returns {{ version: number, size: number, mask: number, modules: number[][] }}
+ */
+function qrMatrix(text, forcedMask = null) {
+  const bytes = Array.from(new TextEncoder().encode(text));
+  const version = pickVersion(bytes.length);
+
+  const canvas = new Canvas(version);
+  canvas.drawFunctionPatterns();
+  canvas.drawCodewords(addEccAndInterleave(dataCodewords(bytes, version), version));
+
+  let mask = forcedMask;
+  if (mask === null) {
+    let best = Infinity;
+    for (let i = 0; i < 8; i++) {
+      canvas.applyMask(i);
+      canvas.drawFormatBits(i);
+      const score = canvas.penalty();
+      if (score < best) {
+        best = score;
+        mask = i;
+      }
+      canvas.applyMask(i); // deshacer
+    }
+  }
+  canvas.applyMask(mask);
+  canvas.drawFormatBits(mask);
+
+  return {
+    version,
+    size: canvas.size,
+    mask,
+    modules: canvas.modules.map((fila) => Array.from(fila)),
+  };
+}
+
+/** Dibuja el codigo en un canvas, con la zona tranquila que exige la norma. */
+function drawQr(canvasEl, text, { scale = 4, quiet = 4 } = {}) {
+  const { size, modules } = qrMatrix(text);
+  const total = (size + quiet * 2) * scale;
+  canvasEl.width = total;
+  canvasEl.height = total;
+  const ctx = canvasEl.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, total, total);
+  ctx.fillStyle = '#000000';
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (modules[r][c]) ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+    }
+  }
+  return { size, total };
+}
+
+// ===== web/protocolo.js =====
+// Protocolo Pana Pago en JavaScript.
+//
+// Es una reimplementacion del modulo :core (Kotlin) para poder enseñar el
+// sistema funcionando en un navegador. No es una maqueta: usa las mismas
+// primitivas (ECDSA P-256 con SHA-256), la misma serializacion canonica byte a
+// byte y el mismo formato de QR.
+//
+// Que sea de verdad el mismo protocolo no se da por supuesto: en
+// tools/generar-fixtures.mjs se genera un escenario completo con ESTE codigo y
+// core/src/test/.../CompatibilidadWebTest.kt lo verifica con la implementacion
+// Kotlin de produccion. Si alguna de las dos se desvia, esa prueba falla.
+
+const subtle = globalThis.crypto.subtle;
+
+// --- Bytes, base64url ---------------------------------------------------------
+
+function b64urlEncode(bytes) {
+  let binario = '';
+  for (const b of bytes) binario += String.fromCharCode(b);
+  return btoa(binario).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(texto) {
+  const base = texto.replace(/-/g, '+').replace(/_/g, '/');
+  const binario = atob(base + '='.repeat((4 - (base.length % 4)) % 4));
+  return Uint8Array.from(binario, (c) => c.charCodeAt(0));
+}
+
+const concat = (...trozos) => {
+  const total = trozos.reduce((n, t) => n + t.length, 0);
+  const salida = new Uint8Array(total);
+  let offset = 0;
+  for (const t of trozos) {
+    salida.set(t, offset);
+    offset += t.length;
+  }
+  return salida;
+};
+
+const bytesEqual = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// --- Serializacion ------------------------------------------------------------
+
+const DOMINIO = 've.transporte.panapago/v1';
+const TAG = {
+  GRANT: 'purse-grant',
+  CHALLENGE: 'validator-challenge',
+  SPEND: 'spend-token',
+  VALIDATOR_CERT: 'validator-cert',
+};
+
+/**
+ * Escritor de campos con prefijo de longitud. Es el mismo formato que usa
+ * CanonicalWriter/FrameWriter en Kotlin: 4 bytes de longitud en big-endian y
+ * despues el contenido. El orden de los campos lo fija el codigo.
+ */
+class Escritor {
+  constructor(tagDominio = null) {
+    this.trozos = [];
+    if (tagDominio !== null) {
+      this.str(DOMINIO);
+      this.str(tagDominio);
+    }
+  }
+
+  bytes(v) {
+    const cabecera = new Uint8Array(4);
+    new DataView(cabecera.buffer).setUint32(0, v.length, false);
+    this.trozos.push(cabecera, v);
+    return this;
+  }
+
+  str(v) { return this.bytes(new TextEncoder().encode(v)); }
+
+  long(v) {
+    const b = new Uint8Array(8);
+    new DataView(b.buffer).setBigInt64(0, BigInt(v), false);
+    return this.bytes(b);
+  }
+
+  int(v) { return this.long(v); }
+
+  build() { return concat(...this.trozos); }
+}
+
+class Lector {
+  constructor(buf) {
+    this.buf = buf;
+    this.pos = 0;
+  }
+
+  bytes() {
+    if (this.pos + 4 > this.buf.length) throw new Error('trama truncada');
+    const len = new DataView(this.buf.buffer, this.buf.byteOffset + this.pos, 4).getUint32(0, false);
+    this.pos += 4;
+    if (this.pos + len > this.buf.length) throw new Error('longitud de campo invalida');
+    const out = this.buf.slice(this.pos, this.pos + len);
+    this.pos += len;
+    return out;
+  }
+
+  str() { return new TextDecoder().decode(this.bytes()); }
+
+  long() {
+    const b = this.bytes();
+    if (b.length !== 8) throw new Error('entero mal formado');
+    return Number(new DataView(b.buffer, b.byteOffset, 8).getBigInt64(0, false));
+  }
+
+  int() { return this.long(); }
+
+  end() {
+    if (this.pos !== this.buf.length) throw new Error('bytes sobrantes en la trama');
+  }
+}
+
+// --- Criptografia --------------------------------------------------------------
+
+const ALGO = { name: 'ECDSA', namedCurve: 'P-256' };
+const FIRMA = { name: 'ECDSA', hash: 'SHA-256' };
+
+async function generarClaves() {
+  const par = await subtle.generateKey(ALGO, true, ['sign', 'verify']);
+  const publica = new Uint8Array(await subtle.exportKey('spki', par.publicKey));
+  return { privateKey: par.privateKey, publicKey: par.publicKey, publicKeyEncoded: publica };
+}
+
+const importarPublica = (spki) =>
+  subtle.importKey('spki', spki, ALGO, true, ['verify']);
+
+/**
+ * WebCrypto firma en formato crudo (r||s, 64 bytes) y Java/Android en DER.
+ * Se convierte para que las firmas de esta implementacion las pueda verificar
+ * el core en Kotlin, y al reves.
+ */
+function rawADer(raw) {
+  const entero = (bytes) => {
+    let i = 0;
+    while (i < bytes.length - 1 && bytes[i] === 0) i++;
+    let v = bytes.slice(i);
+    if (v[0] & 0x80) v = concat(new Uint8Array([0]), v);
+    return concat(new Uint8Array([0x02, v.length]), v);
+  };
+  const r = entero(raw.slice(0, 32));
+  const s = entero(raw.slice(32, 64));
+  const cuerpo = concat(r, s);
+  return concat(new Uint8Array([0x30, cuerpo.length]), cuerpo);
+}
+
+function derARaw(der) {
+  if (der[0] !== 0x30) throw new Error('firma DER invalida');
+  let pos = 2;
+  const leerEntero = () => {
+    if (der[pos] !== 0x02) throw new Error('firma DER invalida');
+    const len = der[pos + 1];
+    let v = der.slice(pos + 2, pos + 2 + len);
+    pos += 2 + len;
+    while (v.length > 32 && v[0] === 0) v = v.slice(1);
+    const salida = new Uint8Array(32);
+    salida.set(v, 32 - v.length);
+    return salida;
+  };
+  return concat(leerEntero(), leerEntero());
+}
+
+async function firmar(privateKey, mensaje) {
+  const raw = new Uint8Array(await subtle.sign(FIRMA, privateKey, mensaje));
+  return rawADer(raw);
+}
+
+async function verificar(publicKeyEncoded, mensaje, firmaDer) {
+  try {
+    const key = await importarPublica(publicKeyEncoded);
+    return await subtle.verify(FIRMA, key, derARaw(firmaDer), mensaje);
+  } catch {
+    return false;
+  }
+}
+
+const sha256 = async (...partes) =>
+  new Uint8Array(await subtle.digest('SHA-256', concat(...partes)));
+
+const huellaDeClave = async (spki) => b64urlEncode(await sha256(spki));
+
+const CEROS_32 = new Uint8Array(32);
+
+function nonce(n = 16) {
+  const b = new Uint8Array(n);
+  globalThis.crypto.getRandomValues(b);
+  return b64urlEncode(b);
+}
+
+// --- Dinero ---------------------------------------------------------------------
+
+const MONEDA = 'VES';
+
+const Money = {
+  desdeBolivares(texto) {
+    const limpio = String(texto).trim().replace(',', '.');
+    if (!/^-?\d+(\.\d{1,2})?$/.test(limpio)) throw new Error(`Monto invalido: ${texto}`);
+    const negativo = limpio.startsWith('-');
+    const [entero, decimales = ''] = limpio.replace('-', '').split('.');
+    const total = Number(entero) * 100 + Number(decimales.padEnd(2, '0') || 0);
+    return negativo ? -total : total;
+  },
+  /**
+   * Formato venezolano: punto para los miles, coma para los decimales.
+   * Solo afecta a lo que se muestra; por el cable los montos siempre viajan
+   * como enteros de centimos, igual que en Kotlin.
+   */
+  formato(centimos) {
+    const signo = centimos < 0 ? '-' : '';
+    const abs = Math.abs(centimos);
+    const enteros = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `${signo}${enteros},${String(abs % 100).padStart(2, '0')} Bs`;
+  },
+};
+
+// --- Mensajes -------------------------------------------------------------------
+
+const bytesDelVale = (g) => new Escritor(TAG.GRANT)
+  .str(g.grantId).str(g.walletId).str(g.deviceKeyFingerprint)
+  .long(g.amountCentimos).str(g.currency)
+  .long(g.issuedAtEpochSec).long(g.expiresAtEpochSec)
+  .long(g.offlineSpendCapCentimos).int(g.offlineTripCap)
+  .str(g.issuerKeyId).str(g.nonce)
+  .build();
+
+const bytesDelCertificado = (c) => new Escritor(TAG.VALIDATOR_CERT)
+  .str(c.validatorId).str(c.unitId).str(c.ownerId).str(c.publicKeyFingerprint)
+  .long(c.issuedAtEpochSec).long(c.expiresAtEpochSec).str(c.issuerKeyId)
+  .build();
+
+const bytesDelReto = (c) => new Escritor(TAG.CHALLENGE)
+  .str(c.validatorId).str(c.unitId).str(c.ownerId).str(c.routeId)
+  .long(c.fareCentimos).str(c.challengeNonce)
+  .long(c.issuedAtEpochSec).int(c.ttlSeconds).str(c.validatorKeyId)
+  .build();
+
+const bytesDelGasto = (t) => new Escritor(TAG.SPEND)
+  .str(t.grantId).str(t.walletId).long(t.seq)
+  .long(t.amountCentimos).long(t.balanceAfterCentimos)
+  .bytes(t.prevHash)
+  .str(t.validatorId).str(t.unitId).str(t.ownerId).str(t.routeId)
+  .str(t.challengeNonce).long(t.spentAtEpochSec).str(t.deviceKeyFingerprint)
+  .build();
+
+const hashDelEslabon = (gasto) => sha256(bytesDelGasto(gasto.token), gasto.signature);
+const idDelEslabon = async (gasto) => b64urlEncode(await hashDelEslabon(gasto));
+
+// --- Codificacion de los QR -------------------------------------------------------
+
+const PREFIJO = 'PP1';
+const TIPO = { RETO: 'CHL', GASTO: 'SPD', VALE: 'GRT' };
+
+const envolver = (tipo, trama) => `${PREFIJO}:${tipo}:${b64urlEncode(trama)}`;
+
+function desenvolver(texto, tipoEsperado) {
+  const partes = String(texto).trim().split(':');
+  if (partes.length !== 3 || partes[0] !== PREFIJO) throw new Error('no es un QR de Pana Pago');
+  if (partes[1] !== tipoEsperado) throw new Error(`tipo de QR inesperado: ${partes[1]}`);
+  return b64urlDecode(partes[2]);
+}
+
+const tipoDeQr = (texto) => {
+  const partes = String(texto).trim().split(':');
+  return partes.length === 3 && partes[0] === PREFIJO ? partes[1] : null;
+};
+
+function codificarReto(firmado) {
+  const c = firmado.challenge;
+  const cert = firmado.cert.cert;
+  const trama = new Escritor()
+    .str(c.validatorId).str(c.unitId).str(c.ownerId).str(c.routeId)
+    .long(c.fareCentimos).str(c.challengeNonce)
+    .long(c.issuedAtEpochSec).int(c.ttlSeconds).str(c.validatorKeyId)
+    .bytes(firmado.signature).bytes(firmado.validatorPublicKey)
+    .str(cert.validatorId).str(cert.unitId).str(cert.ownerId).str(cert.publicKeyFingerprint)
+    .long(cert.issuedAtEpochSec).long(cert.expiresAtEpochSec)
+    .str(cert.issuerKeyId).bytes(firmado.cert.signature)
+    .build();
+  return envolver(TIPO.RETO, trama);
+}
+
+function decodificarReto(texto) {
+  const r = new Lector(desenvolver(texto, TIPO.RETO));
+  const challenge = {
+    validatorId: r.str(), unitId: r.str(), ownerId: r.str(), routeId: r.str(),
+    fareCentimos: r.long(), challengeNonce: r.str(),
+    issuedAtEpochSec: r.long(), ttlSeconds: r.int(), validatorKeyId: r.str(),
+  };
+  const signature = r.bytes();
+  const validatorPublicKey = r.bytes();
+  const cert = {
+    validatorId: r.str(), unitId: r.str(), ownerId: r.str(), publicKeyFingerprint: r.str(),
+    issuedAtEpochSec: r.long(), expiresAtEpochSec: r.long(), issuerKeyId: r.str(),
+  };
+  const certSignature = r.bytes();
+  r.end();
+  return { challenge, signature, validatorPublicKey, cert: { cert, signature: certSignature } };
+}
+
+function codificarVale(firmado) {
+  const g = firmado.grant;
+  const trama = new Escritor()
+    .str(g.grantId).str(g.walletId).str(g.deviceKeyFingerprint)
+    .long(g.amountCentimos).str(g.currency)
+    .long(g.issuedAtEpochSec).long(g.expiresAtEpochSec)
+    .long(g.offlineSpendCapCentimos).int(g.offlineTripCap)
+    .str(g.issuerKeyId).str(g.nonce).bytes(firmado.signature)
+    .build();
+  return envolver(TIPO.VALE, trama);
+}
+
+function codificarGasto(firmado) {
+  const t = firmado.token;
+  const g = firmado.grant.grant;
+  const trama = new Escritor()
+    .str(g.grantId).str(g.walletId).str(g.deviceKeyFingerprint)
+    .long(g.amountCentimos).str(g.currency)
+    .long(g.issuedAtEpochSec).long(g.expiresAtEpochSec)
+    .long(g.offlineSpendCapCentimos).int(g.offlineTripCap)
+    .str(g.issuerKeyId).str(g.nonce).bytes(firmado.grant.signature)
+    .long(t.seq).long(t.amountCentimos).long(t.balanceAfterCentimos)
+    .bytes(t.prevHash)
+    .str(t.validatorId).str(t.unitId).str(t.ownerId).str(t.routeId)
+    .str(t.challengeNonce).long(t.spentAtEpochSec)
+    .bytes(firmado.signature).bytes(firmado.devicePublicKey)
+    .build();
+  return envolver(TIPO.GASTO, trama);
+}
+
+function decodificarGasto(texto) {
+  const r = new Lector(desenvolver(texto, TIPO.GASTO));
+  const grant = {
+    grantId: r.str(), walletId: r.str(), deviceKeyFingerprint: r.str(),
+    amountCentimos: r.long(), currency: r.str(),
+    issuedAtEpochSec: r.long(), expiresAtEpochSec: r.long(),
+    offlineSpendCapCentimos: r.long(), offlineTripCap: r.int(),
+    issuerKeyId: r.str(), nonce: r.str(),
+  };
+  const grantSignature = r.bytes();
+  const token = {
+    grantId: grant.grantId,
+    walletId: grant.walletId,
+    seq: r.long(),
+    amountCentimos: r.long(),
+    balanceAfterCentimos: r.long(),
+    prevHash: r.bytes(),
+    validatorId: r.str(), unitId: r.str(), ownerId: r.str(), routeId: r.str(),
+    challengeNonce: r.str(),
+    spentAtEpochSec: r.long(),
+    deviceKeyFingerprint: grant.deviceKeyFingerprint,
+  };
+  const signature = r.bytes();
+  const devicePublicKey = r.bytes();
+  r.end();
+  return { token, signature, grant: { grant, signature: grantSignature }, devicePublicKey };
+}
+
+// ===== web/motor.js =====
+// Monedero, validador y servidor: la misma logica que el modulo :core en Kotlin.
+// Ver web/protocolo.js para las primitivas y la nota sobre compatibilidad.
+
+
+const ahora = () => Math.floor(Date.now() / 1000);
+
+// --- Servidor emisor y liquidador ------------------------------------------------
+
+const POLITICA_POR_DEFECTO = {
+  vigenciaDelValeSegundos: 30 * 24 * 3600,
+  vigenciaDelCertificadoSegundos: 365 * 24 * 3600,
+  topeOfflineCentimos: 200_00,
+  topeDeViajesOffline: 30,
+  comisionPuntosBasicos: 300,
+};
+
+class Servidor {
+  constructor(politica = POLITICA_POR_DEFECTO, reloj = ahora) {
+    this.politica = { ...politica };
+    this.reloj = reloj;
+    this.cuentas = new Map();
+    this.vales = new Map();
+    this.libro = new Map();       // "grantId#seq" -> gasto firmado
+    this.doblesGastos = [];
+    this.recibosSinLiquidar = new Map();
+    this.contador = 0;
+  }
+
+  async iniciar() {
+    this.emisor = await generarClaves();
+    this.emisorKeyId = 'emisor-demo-2026-01';
+    return this;
+  }
+
+  get anclas() {
+    return new Map([[this.emisorKeyId, this.emisor.publicKeyEncoded]]);
+  }
+
+  id(prefijo) { return `${prefijo}-${++this.contador}`; }
+
+  async registrarMonedero(devicePublicKey, walletId = null) {
+    const id = walletId || this.id('w');
+    this.cuentas.set(id, {
+      walletId: id,
+      deviceFingerprint: await huellaDeClave(devicePublicKey),
+      bloqueado: false,
+      deudaCentimos: 0,
+    });
+    return id;
+  }
+
+  async registrarValidador(validatorId, unitId, ownerId, validatorPublicKey) {
+    const t = this.reloj();
+    const cert = {
+      validatorId, unitId, ownerId,
+      publicKeyFingerprint: await huellaDeClave(validatorPublicKey),
+      issuedAtEpochSec: t,
+      expiresAtEpochSec: t + this.politica.vigenciaDelCertificadoSegundos,
+      issuerKeyId: this.emisorKeyId,
+    };
+    return { cert, signature: await firmar(this.emisor.privateKey, bytesDelCertificado(cert)) };
+  }
+
+  /** Recarga: cobra, retiene el dinero y firma el vale. Requiere internet. */
+  async recargar(walletId, amountCentimos) {
+    const cuenta = this.cuentas.get(walletId);
+    if (!cuenta) throw new Error(`monedero no registrado: ${walletId}`);
+    if (cuenta.bloqueado) throw new Error('monedero bloqueado por fraude');
+    if (amountCentimos <= 0) throw new Error('la recarga debe ser positiva');
+
+    const t = this.reloj();
+    const grant = {
+      grantId: this.id('g'),
+      walletId,
+      deviceKeyFingerprint: cuenta.deviceFingerprint,
+      amountCentimos,
+      currency: MONEDA,
+      issuedAtEpochSec: t,
+      expiresAtEpochSec: t + this.politica.vigenciaDelValeSegundos,
+      offlineSpendCapCentimos: Math.max(0, Math.min(amountCentimos, this.politica.topeOfflineCentimos)),
+      offlineTripCap: this.politica.topeDeViajesOffline,
+      issuerKeyId: this.emisorKeyId,
+      nonce: nonce(),
+    };
+    this.vales.set(grant.grantId, {
+      grantId: grant.grantId, walletId, amountCentimos,
+      garantiaCentimos: amountCentimos, gastadoLiquidadoCentimos: 0,
+    });
+    return { grant, signature: await firmar(this.emisor.privateKey, bytesDelVale(grant)) };
+  }
+
+  /**
+   * Registra un gasto y detecta bifurcaciones: dos gastos DISTINTOS en la misma
+   * posicion (grantId, seq) de la cadena son doble gasto, y las dos firmas son
+   * del propio usuario.
+   */
+  async registrarGasto(gasto) {
+    const t = gasto.token;
+    const clave = `${t.grantId}#${t.seq}`;
+    const previo = this.libro.get(clave);
+    if (!previo) {
+      this.libro.set(clave, gasto);
+      return;
+    }
+    const mismoEslabon = (await idDelEslabon(previo)) === (await idDelEslabon(gasto));
+    if (mismoEslabon) return;
+    const yaVisto = this.doblesGastos.some((d) => d.grantId === t.grantId && d.seq === t.seq);
+    if (!yaVisto) {
+      this.doblesGastos.push({
+        walletId: t.walletId, grantId: t.grantId, seq: t.seq,
+        ramaA: previo, ramaB: gasto,
+      });
+    }
+  }
+
+  async subirRecibos(validatorId, recibos) {
+    const ids = [];
+    for (const recibo of recibos) {
+      await this.registrarGasto(recibo.spend);
+      this.recibosSinLiquidar.set(recibo.receiptId, recibo);
+      ids.push(recibo.receiptId);
+    }
+    return ids;
+  }
+
+  async sincronizarMonedero(walletId, gastos) {
+    const confirmados = [];
+    for (const gasto of gastos) {
+      if (gasto.token.walletId !== walletId) continue;
+      await this.registrarGasto(gasto);
+      confirmados.push(await idDelEslabon(gasto));
+    }
+    return { confirmados, tiempoServidorEpochSec: this.reloj() };
+  }
+
+  /** Cierra las cuentas: bloquea a los defraudadores y calcula la perdida. */
+  reconciliar() {
+    const bloqueados = [];
+    let descubierto = 0;
+    for (const prueba of this.doblesGastos) {
+      const cuenta = this.cuentas.get(prueba.walletId);
+      if (!cuenta) continue;
+      if (!cuenta.bloqueado) {
+        cuenta.bloqueado = true;
+        bloqueados.push(cuenta.walletId);
+      }
+      const perdida = prueba.ramaB.token.amountCentimos;
+      const vale = this.vales.get(prueba.grantId);
+      const deLaGarantia = Math.min(perdida, vale ? vale.garantiaCentimos : 0);
+      if (vale) vale.garantiaCentimos -= deLaGarantia;
+      const resto = perdida - deLaGarantia;
+      cuenta.deudaCentimos += resto;
+      descubierto += resto;
+    }
+    return {
+      gastosProcesados: this.libro.size,
+      doblesGastos: this.doblesGastos,
+      monederosBloqueados: bloqueados,
+      descubiertoCentimos: descubierto,
+    };
+  }
+
+  listaNegra() {
+    return new Set([...this.cuentas.values()].filter((c) => c.bloqueado).map((c) => c.walletId));
+  }
+
+  /** Lo que se le paga al dueño de la unidad, en bolivares. */
+  liquidar(ownerId) {
+    const mios = [...this.recibosSinLiquidar.values()].filter((r) => r.ownerId === ownerId);
+    const bruto = mios.reduce((n, r) => n + r.spend.token.amountCentimos, 0);
+    const comision = Math.floor((bruto * this.politica.comisionPuntosBasicos) / 10_000);
+    for (const r of mios) {
+      this.recibosSinLiquidar.delete(r.receiptId);
+      const vale = this.vales.get(r.spend.token.grantId);
+      if (vale) {
+        vale.garantiaCentimos = Math.max(0, vale.garantiaCentimos - r.spend.token.amountCentimos);
+      }
+    }
+    return {
+      ownerId, pasajes: mios.length,
+      brutoCentimos: bruto, comisionCentimos: comision, netoCentimos: bruto - comision,
+    };
+  }
+}
+
+// --- Monedero del pasajero ---------------------------------------------------------
+
+const MOTIVO = {
+  SIN_SALDO: 'No tienes saldo cargado',
+  SALDO_INSUFICIENTE: 'Saldo insuficiente',
+  TOPE_OFFLINE: 'Llegaste al tope sin conexion: conectate para liberar mas saldo',
+  TOPE_VIAJES: 'Llegaste al tope de viajes sin conexion',
+  VALE_CADUCADO: 'Tu saldo vencio',
+  RETO_CADUCADO: 'El QR del cobrador ya vencio, pide otro',
+  RETO_YA_USADO: 'Ese cobro ya lo pagaste',
+  VALIDADOR_NO_REGISTRADO: 'Cuidado: ese cobrador no esta registrado. No pagues.',
+  FIRMA_DEL_RETO: 'Cuidado: ese cobrador no esta registrado. No pagues.',
+  VALE_DE_OTRO_TELEFONO: 'Ese saldo es de otro telefono',
+  FIRMA_DEL_VALE: 'Ese saldo no lo emitio el servidor',
+  EMISOR_DESCONOCIDO: 'Ese saldo viene de un emisor desconocido',
+};
+
+class Monedero {
+  constructor(claves, huella, anclas, reloj = ahora) {
+    this.claves = claves;
+    this.huella = huella;
+    this.anclas = anclas;
+    this.reloj = reloj;
+    this.vales = [];
+  }
+
+  static async crear(anclas, reloj = ahora) {
+    const claves = await generarClaves();
+    return new Monedero(claves, await huellaDeClave(claves.publicKeyEncoded), anclas, reloj);
+  }
+
+  get saldoCentimos() {
+    return this.vales.reduce((n, v) => n + v.saldoCentimos, 0);
+  }
+
+  get gastableOfflineCentimos() {
+    return this.vales.reduce(
+      (n, v) => n + Math.min(v.saldoCentimos, Math.max(0, v.signedGrant.grant.offlineSpendCapCentimos - v.offlineGastadoCentimos)),
+      0,
+    );
+  }
+
+  get pendientes() {
+    return this.vales.flatMap((v) => v.pendientes);
+  }
+
+  async cargarVale(signedGrant) {
+    const g = signedGrant.grant;
+    const ancla = this.anclas.get(g.issuerKeyId);
+    if (!ancla) return { ok: false, motivo: MOTIVO.EMISOR_DESCONOCIDO };
+    if (!(await verificar(ancla, bytesDelVale(g), signedGrant.signature))) {
+      return { ok: false, motivo: MOTIVO.FIRMA_DEL_VALE };
+    }
+    if (g.deviceKeyFingerprint !== this.huella) {
+      return { ok: false, motivo: MOTIVO.VALE_DE_OTRO_TELEFONO };
+    }
+    this.vales.push({
+      signedGrant,
+      siguienteSeq: 1,
+      ultimoHash: CEROS_32,
+      saldoCentimos: g.amountCentimos,
+      offlineGastadoCentimos: 0,
+      offlineViajes: 0,
+      pendientes: [],
+      noncesUsados: new Set(),
+      pisoDeTiempo: g.issuedAtEpochSec,
+    });
+    return { ok: true };
+  }
+
+  /** Instantanea del estado, para simular un respaldo del telefono. */
+  respaldar() {
+    return this.vales.map((v) => ({
+      ...v,
+      pendientes: [...v.pendientes],
+      noncesUsados: new Set(v.noncesUsados),
+    }));
+  }
+
+  restaurar(respaldo) {
+    this.vales = respaldo.map((v) => ({
+      ...v,
+      pendientes: [...v.pendientes],
+      noncesUsados: new Set(v.noncesUsados),
+    }));
+  }
+
+  /** Paga un pasaje SIN INTERNET. */
+  async pagar(retoFirmado) {
+    if (this.vales.length === 0) return { ok: false, motivo: MOTIVO.SIN_SALDO };
+
+    const c = retoFirmado.challenge;
+    const cert = retoFirmado.cert.cert;
+
+    const ancla = this.anclas.get(cert.issuerKeyId);
+    if (!ancla || !(await verificar(ancla, bytesDelCertificado(cert), retoFirmado.cert.signature))) {
+      return { ok: false, motivo: MOTIVO.VALIDADOR_NO_REGISTRADO };
+    }
+    const huellaReto = await huellaDeClave(retoFirmado.validatorPublicKey);
+    if (cert.publicKeyFingerprint !== huellaReto ||
+      cert.validatorId !== c.validatorId || cert.unitId !== c.unitId || cert.ownerId !== c.ownerId) {
+      return { ok: false, motivo: MOTIVO.VALIDADOR_NO_REGISTRADO };
+    }
+    if (!(await verificar(retoFirmado.validatorPublicKey, bytesDelReto(c), retoFirmado.signature))) {
+      return { ok: false, motivo: MOTIVO.FIRMA_DEL_RETO };
+    }
+
+    // Ordenados por vencimiento: primero el que caduca antes (FEFO).
+    const candidatos = [...this.vales].sort(
+      (a, b) => a.signedGrant.grant.expiresAtEpochSec - b.signedGrant.grant.expiresAtEpochSec,
+    );
+    const motivos = [];
+
+    for (const vale of candidatos) {
+      const g = vale.signedGrant.grant;
+      // La hora del reto viene firmada: sirve de fuente de tiempo confiable y
+      // empuja el piso, de modo que atrasar el reloj del telefono no sirve.
+      const piso = Math.max(vale.pisoDeTiempo, c.issuedAtEpochSec);
+      const t = Math.max(this.reloj(), piso);
+
+      if (t > c.issuedAtEpochSec + c.ttlSeconds) return { ok: false, motivo: MOTIVO.RETO_CADUCADO };
+      if (vale.noncesUsados.has(c.challengeNonce)) { motivos.push(MOTIVO.RETO_YA_USADO); continue; }
+      if (t >= g.expiresAtEpochSec) { motivos.push(MOTIVO.VALE_CADUCADO); continue; }
+      if (c.fareCentimos > vale.saldoCentimos) { motivos.push(MOTIVO.SALDO_INSUFICIENTE); continue; }
+      if (c.fareCentimos > g.offlineSpendCapCentimos - vale.offlineGastadoCentimos) {
+        motivos.push(MOTIVO.TOPE_OFFLINE);
+        continue;
+      }
+      if (vale.offlineViajes >= g.offlineTripCap) { motivos.push(MOTIVO.TOPE_VIAJES); continue; }
+
+      const token = {
+        grantId: g.grantId,
+        walletId: g.walletId,
+        seq: vale.siguienteSeq,
+        amountCentimos: c.fareCentimos,
+        balanceAfterCentimos: vale.saldoCentimos - c.fareCentimos,
+        prevHash: vale.ultimoHash,
+        validatorId: c.validatorId, unitId: c.unitId, ownerId: c.ownerId, routeId: c.routeId,
+        challengeNonce: c.challengeNonce,
+        spentAtEpochSec: t,
+        deviceKeyFingerprint: this.huella,
+      };
+      const signature = await firmar(this.claves.privateKey, bytesDelGasto(token));
+      const gasto = { token, signature, grant: vale.signedGrant, devicePublicKey: this.claves.publicKeyEncoded };
+
+      vale.siguienteSeq += 1;
+      vale.ultimoHash = await hashDelEslabon(gasto);
+      vale.saldoCentimos -= c.fareCentimos;
+      vale.offlineGastadoCentimos += c.fareCentimos;
+      vale.offlineViajes += 1;
+      vale.pendientes.push(gasto);
+      vale.noncesUsados.add(c.challengeNonce);
+      vale.pisoDeTiempo = t;
+
+      return { ok: true, gasto, qr: codificarGasto(gasto) };
+    }
+
+    const prioridad = [
+      MOTIVO.RETO_YA_USADO, MOTIVO.VALE_CADUCADO, MOTIVO.TOPE_VIAJES,
+      MOTIVO.TOPE_OFFLINE, MOTIVO.SALDO_INSUFICIENTE,
+    ];
+    const motivo = prioridad.find((m) => motivos.includes(m)) || MOTIVO.SIN_SALDO;
+    return { ok: false, motivo };
+  }
+
+  aplicarSincronizacion(ack) {
+    const confirmados = new Set(ack.confirmados);
+    for (const vale of this.vales) {
+      vale.pendientesConfirmados = vale.pendientes.filter((p) => confirmados.has(p.__id));
+    }
+  }
+
+  /** Version simple para la demo: se repone el cupo de lo que el servidor confirmo. */
+  async aplicarAck(ack) {
+    const confirmados = new Set(ack.confirmados);
+    for (const vale of this.vales) {
+      const quedan = [];
+      for (const p of vale.pendientes) {
+        if (!confirmados.has(await idDelEslabon(p))) quedan.push(p);
+      }
+      vale.pendientes = quedan;
+      vale.offlineGastadoCentimos = quedan.reduce((n, p) => n + p.token.amountCentimos, 0);
+      vale.offlineViajes = quedan.length;
+      vale.pisoDeTiempo = Math.max(vale.pisoDeTiempo, ack.tiempoServidorEpochSec);
+      if (quedan.length === 0) vale.noncesUsados = new Set();
+    }
+  }
+}
+
+// --- Validador de la unidad ----------------------------------------------------------
+
+const RECHAZO = {
+  QR_ILEGIBLE: 'QR ilegible',
+  SALDO_FALSO: 'SALDO FALSO — no lo dejes pasar',
+  EMISOR_DESCONOCIDO: 'SALDO FALSO — no lo dejes pasar',
+  CLAVE_AJENA: 'Saldo copiado de otro telefono',
+  FIRMA_INVALIDA: 'Firma del pago invalida',
+  OTRA_UNIDAD: 'Ese pago era para otra unidad',
+  DOBLE_GASTO: 'Pago repetido — ya se cobro',
+  BLOQUEADO: 'Monedero bloqueado por fraude',
+  VALE_CADUCADO: 'El saldo del pasajero vencio',
+  RETO_DESCONOCIDO: 'Ese QR no responde a este cobro',
+  RETO_CADUCADO: 'El cobro vencio, genera otro',
+  MONTO: 'El monto no es el del pasaje',
+  ARITMETICA: 'Cuentas del pago invalidas',
+  FECHA: 'Hora del pago fuera de rango',
+};
+
+class Validador {
+  constructor(config, claves, cert, anclas, reloj = ahora) {
+    this.config = config;
+    this.claves = claves;
+    this.cert = cert;
+    this.anclas = anclas;
+    this.reloj = reloj;
+    this.retosAbiertos = new Map();
+    this.eslabonesVistos = new Map();
+    this.recibos = new Map();
+    this.listaNegra = new Set();
+  }
+
+  static async crear(servidor, { validatorId, unitId, ownerId, routeId, fareCentimos, ttlSeconds = 45 }, reloj = ahora) {
+    const claves = await generarClaves();
+    const cert = await servidor.registrarValidador(validatorId, unitId, ownerId, claves.publicKeyEncoded);
+    return new Validador(
+      { validatorId, unitId, ownerId, routeId, fareCentimos, ttlSeconds, desfaseMaximoSegundos: 120 },
+      claves, cert, servidor.anclas, reloj,
+    );
+  }
+
+  get acumuladoCentimos() {
+    return [...this.recibos.values()].reduce((n, r) => n + r.spend.token.amountCentimos, 0);
+  }
+
+  get recibosPendientes() { return [...this.recibos.values()]; }
+
+  /** Abre un cobro: nonce nuevo y caducidad corta. */
+  async nuevoReto(fareCentimos = this.config.fareCentimos) {
+    const t = this.reloj();
+    for (const [n, c] of this.retosAbiertos) {
+      if (t > c.issuedAtEpochSec + c.ttlSeconds) this.retosAbiertos.delete(n);
+    }
+    const challenge = {
+      validatorId: this.config.validatorId,
+      unitId: this.config.unitId,
+      ownerId: this.config.ownerId,
+      routeId: this.config.routeId,
+      fareCentimos,
+      challengeNonce: nonce(),
+      issuedAtEpochSec: t,
+      ttlSeconds: this.config.ttlSeconds,
+      validatorKeyId: this.config.validatorId,
+    };
+    this.retosAbiertos.set(challenge.challengeNonce, challenge);
+    const firmado = {
+      challenge,
+      signature: await firmar(this.claves.privateKey, bytesDelReto(challenge)),
+      validatorPublicKey: this.claves.publicKeyEncoded,
+      cert: this.cert,
+    };
+    return { firmado, qr: codificarReto(firmado) };
+  }
+
+  /** Verifica y cobra un pago. Todo sin internet. */
+  async aceptar(gasto) {
+    const t = this.reloj();
+    const g = gasto.grant.grant;
+    const tk = gasto.token;
+
+    const ancla = this.anclas.get(g.issuerKeyId);
+    if (!ancla) return { estado: 'rechazado', motivo: RECHAZO.EMISOR_DESCONOCIDO };
+    if (!(await verificar(ancla, bytesDelVale(g), gasto.grant.signature))) {
+      return { estado: 'rechazado', motivo: RECHAZO.SALDO_FALSO };
+    }
+    if (t >= g.expiresAtEpochSec) return { estado: 'rechazado', motivo: RECHAZO.VALE_CADUCADO };
+
+    const huella = await huellaDeClave(gasto.devicePublicKey);
+    if (huella !== g.deviceKeyFingerprint || huella !== tk.deviceKeyFingerprint) {
+      return { estado: 'rechazado', motivo: RECHAZO.CLAVE_AJENA };
+    }
+    if (!(await verificar(gasto.devicePublicKey, bytesDelGasto(tk), gasto.signature))) {
+      return { estado: 'rechazado', motivo: RECHAZO.FIRMA_INVALIDA };
+    }
+    if (this.listaNegra.has(tk.walletId)) {
+      return { estado: 'rechazado', motivo: RECHAZO.BLOQUEADO };
+    }
+    if (tk.validatorId !== this.config.validatorId || tk.unitId !== this.config.unitId ||
+      tk.ownerId !== this.config.ownerId || tk.routeId !== this.config.routeId) {
+      return { estado: 'rechazado', motivo: RECHAZO.OTRA_UNIDAD };
+    }
+
+    // La repeticion se mira ANTES que el reto: al aceptar un pago se consume su
+    // reto, y un segundo escaneo del mismo QR ya no lo encontraria.
+    const clave = `${tk.grantId}#${tk.seq}`;
+    const id = await idDelEslabon(gasto);
+    const previo = this.eslabonesVistos.get(clave);
+    if (previo) {
+      return previo === id
+        ? { estado: 'ya_cobrado', recibo: this.recibos.get(id) || null }
+        : { estado: 'rechazado', motivo: RECHAZO.DOBLE_GASTO };
+    }
+
+    const reto = this.retosAbiertos.get(tk.challengeNonce);
+    if (!reto) return { estado: 'rechazado', motivo: RECHAZO.RETO_DESCONOCIDO };
+    if (t > reto.issuedAtEpochSec + reto.ttlSeconds) {
+      this.retosAbiertos.delete(tk.challengeNonce);
+      return { estado: 'rechazado', motivo: RECHAZO.RETO_CADUCADO };
+    }
+    if (tk.amountCentimos !== reto.fareCentimos) {
+      return { estado: 'rechazado', motivo: RECHAZO.MONTO };
+    }
+    if (tk.spentAtEpochSec > t + this.config.desfaseMaximoSegundos ||
+      tk.spentAtEpochSec < reto.issuedAtEpochSec - this.config.desfaseMaximoSegundos) {
+      return { estado: 'rechazado', motivo: RECHAZO.FECHA };
+    }
+    if (tk.seq < 1 || tk.amountCentimos <= 0 || tk.balanceAfterCentimos < 0 ||
+      tk.balanceAfterCentimos + tk.amountCentimos > g.amountCentimos) {
+      return { estado: 'rechazado', motivo: RECHAZO.ARITMETICA };
+    }
+
+    this.retosAbiertos.delete(tk.challengeNonce);
+    this.eslabonesVistos.set(clave, id);
+    const recibo = {
+      receiptId: id, spend: gasto,
+      validatorId: this.config.validatorId, unitId: this.config.unitId,
+      ownerId: this.config.ownerId, acceptedAtEpochSec: t,
+    };
+    this.recibos.set(id, recibo);
+    return {
+      estado: 'aceptado', recibo,
+      montoCentimos: tk.amountCentimos,
+      saldoDelPasajeroCentimos: tk.balanceAfterCentimos,
+    };
+  }
+
+  limpiarLiquidados(ids) { ids.forEach((id) => this.recibos.delete(id)); }
+}
+
+
+// =====================================================================
+//  Interfaz de la demostracion
+// =====================================================================
+
+const $ = (id) => document.getElementById(id);
+
+// Tasa de cambio SUPUESTA, solo para orientar. Sale de los números que dio el
+// cliente (un pasaje de 0,30 US$ equivale a 235 Bs). No la usa el protocolo:
+// todo el dinero se maneja en céntimos de bolívar.
+const CAMBIO_SUPUESTO = 783;
+const cuerpo = document.body;
+
+let mundo = null;
+let retoActual = null;
+let pagoActual = null;
+let pantallazoGuardado = null;
+let conectado = true;
+let evento = 0;
+
+const dibujarEn = (contenedor, texto, pie) => {
+  contenedor.innerHTML = '';
+  const lienzo = document.createElement('canvas');
+  contenedor.appendChild(lienzo);
+  drawQr(lienzo, texto, { scale: 4, quiet: 3 });
+  if (pie) {
+    const p = document.createElement('p');
+    p.className = 'pie';
+    p.textContent = pie;
+    contenedor.appendChild(p);
+  }
+};
+
+const vaciar = (contenedor, mensaje) => {
+  contenedor.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'vacio';
+  p.textContent = mensaje;
+  contenedor.appendChild(p);
+};
+
+const veredicto = (contenedor, clase, titulo, detalle) => {
+  contenedor.innerHTML = '';
+  const caja = document.createElement('div');
+  caja.className = `veredicto ${clase}`;
+  const t = document.createElement('strong');
+  t.textContent = titulo;
+  const d = document.createElement('span');
+  d.textContent = detalle;
+  caja.append(t, d);
+  contenedor.appendChild(caja);
+};
+
+function apuntar(quien, texto, dato = null, clase = '') {
+  evento += 1;
+  const linea = document.createElement('div');
+  linea.className = `linea ${clase}`;
+  const t = document.createElement('div');
+  t.className = 't';
+  t.textContent = String(evento).padStart(3, '0');
+  const q = document.createElement('div');
+  q.className = `quien ${quien}`;
+  q.textContent = quien;
+  const que = document.createElement('div');
+  que.className = 'que';
+  que.textContent = texto;
+  if (dato) {
+    const c = document.createElement('code');
+    c.textContent = dato;
+    que.appendChild(c);
+  }
+  linea.append(t, q, que);
+  $('lineas').appendChild(linea);
+  linea.scrollIntoView({ block: 'nearest' });
+  $('rot-bitacora').textContent = `${evento} evento${evento === 1 ? '' : 's'}`;
+}
+
+const leerMonto = (id, porDefecto) => {
+  try {
+    return Money.desdeBolivares($(id).value);
+  } catch {
+    return porDefecto;
+  }
+};
+
+function refrescar() {
+  const w = mundo?.maria;
+  $('m-saldo').textContent = Money.formato(w ? w.saldoCentimos : 0);
+  $('m-offline').textContent = Money.formato(w ? w.gastableOfflineCentimos : 0);
+  $('m-pendientes').textContent = w ? String(w.pendientes.length) : '0';
+  $('m-acumulado').textContent = Money.formato(mundo?.bus ? mundo.bus.acumuladoCentimos : 0);
+
+  $('btn-recargar').disabled = !conectado;
+  $('btn-sincronizar').disabled = !conectado || !w || w.pendientes.length === 0;
+  $('btn-pagar').disabled = !w || w.saldoCentimos === 0 || !retoActual;
+  $('btn-leer').disabled = !pagoActual;
+  $('btn-subir').disabled = !conectado || !mundo?.bus || mundo.bus.recibosPendientes.length === 0;
+
+  const pasaje = leerMonto('in-pasaje', 0);
+  const tope = leerMonto('in-tope', 0);
+  $('nota-pasaje').textContent = pasaje > 0
+    ? `≈ ${(pasaje / 100 / CAMBIO_SUPUESTO).toFixed(2)} US$ con el cambio a ${CAMBIO_SUPUESTO} Bs/US$.`
+    : 'Escribe un monto válido.';
+  const nota = $('nota-tope');
+  if (tope > 0 && pasaje > 0 && tope < pasaje) {
+    nota.className = 'nota alerta';
+    nota.textContent = `No alcanza ni para un pasaje: nadie podría pagar sin señal.`;
+  } else if (tope > 0 && pasaje > 0) {
+    nota.className = 'nota';
+    nota.textContent = `${Math.floor(tope / pasaje)} viajes sin conectarse. Es la pérdida máxima por teléfono.`;
+  } else {
+    nota.className = 'nota';
+    nota.textContent = 'Escribe un monto válido.';
+  }
+}
+
+async function arrancar() {
+  const politica = {
+    ...POLITICA_POR_DEFECTO,
+    topeOfflineCentimos: leerMonto('in-tope', 2350_00),
+    topeDeViajesOffline: Number($('in-viajes').value) || 30,
+  };
+  const servidor = await new Servidor(politica).iniciar();
+  const maria = await Monedero.crear(servidor.anclas);
+  const walletId = await servidor.registrarMonedero(maria.claves.publicKeyEncoded, 'w-maria');
+  const bus = await Validador.crear(servidor, {
+    validatorId: 'v-bus14', unitId: 'bus-14', ownerId: 'don-enrique',
+    routeId: 'ruta-01', fareCentimos: leerMonto('in-pasaje', 235_00),
+  });
+  mundo = { servidor, maria, walletId, bus };
+  retoActual = null;
+  pagoActual = null;
+  pantallazoGuardado = null;
+  vaciar($('pantalla-pasajero'), 'Sin saldo todavía. Recarga arriba, con internet.');
+  vaciar($('pantalla-validador'), 'Listo para cobrar. Genera un QR de cobro.');
+  refrescar();
+}
+
+// ---------- acciones ----------
+
+$('btn-senal').addEventListener('click', () => {
+  conectado = !conectado;
+  cuerpo.classList.toggle('sin-senal', !conectado);
+  $('txt-senal').textContent = conectado ? 'Con internet' : 'Sin señal';
+  apuntar('servidor', conectado ? 'Vuelve la conexión.' : 'Se cae la conexión. A partir de aquí nadie habla con el servidor.');
+  refrescar();
+});
+
+$('btn-recargar').addEventListener('click', async () => {
+  const monto = leerMonto('in-recarga', 5000_00);
+  mundo.servidor.politica.topeOfflineCentimos = leerMonto('in-tope', 2350_00);
+  mundo.servidor.politica.topeDeViajesOffline = Number($('in-viajes').value) || 30;
+  mundo.bus.config.fareCentimos = leerMonto('in-pasaje', 235_00);
+
+  const vale = await mundo.servidor.recargar(mundo.walletId, monto);
+  const carga = await mundo.maria.cargarVale(vale);
+  if (!carga.ok) {
+    apuntar('pasajero', `Recarga rechazada: ${carga.motivo}`, null, 'mala');
+    return;
+  }
+  apuntar('servidor', `Cobra ${Money.formato(monto)}, retiene el dinero y firma un vale amarrado a la clave de este teléfono.`, `vale ${vale.grant.grantId} · tope sin sincronizar ${Money.formato(vale.grant.offlineSpendCapCentimos)}`, 'destacada');
+  vaciar($('pantalla-pasajero'), `Saldo cargado y bloqueado: ${Money.formato(monto)}. Ya puedes cortar el internet.`);
+  refrescar();
+});
+
+$('btn-cobrar').addEventListener('click', async () => {
+  mundo.bus.config.fareCentimos = leerMonto('in-pasaje', 235_00);
+  const reto = await mundo.bus.nuevoReto();
+  retoActual = reto;
+  pagoActual = null;
+  dibujarEn($('pantalla-validador'), reto.qr, `Cobro de ${Money.formato(reto.firmado.challenge.fareCentimos)} · vence en ${reto.firmado.challenge.ttlSeconds} s`);
+  apuntar('validador', 'Muestra un QR de cobro nuevo, con un número de un solo uso que vence en 45 segundos.', `${reto.qr.slice(0, 46)}…  (${reto.qr.length} caracteres)`);
+  refrescar();
+});
+
+$('btn-pagar').addEventListener('click', async () => {
+  const reto = decodificarReto(retoActual.qr);
+  const pago = await mundo.maria.pagar(reto);
+  if (!pago.ok) {
+    veredicto($('pantalla-pasajero'), 'mal', 'No se pudo pagar', pago.motivo);
+    apuntar('pasajero', `El teléfono se niega a pagar: ${pago.motivo}`, null, 'mala');
+    refrescar();
+    return;
+  }
+  pagoActual = pago;
+  pantallazoGuardado = pago.qr;
+  dibujarEn($('pantalla-pasajero'), pago.qr, `Pagado ${Money.formato(pago.gasto.token.amountCentimos)} · muéstraselo al cobrador`);
+  apuntar('pasajero', 'Verifica el certificado del cobrador, descuenta el saldo y firma el pago. Sin tocar el servidor.', `movimiento #${pago.gasto.token.seq} · quedan ${Money.formato(pago.gasto.token.balanceAfterCentimos)}`, 'destacada');
+  refrescar();
+});
+
+$('btn-leer').addEventListener('click', async () => {
+  const gasto = decodificarGasto(pagoActual.qr);
+  const r = await mundo.bus.aceptar(gasto);
+  if (r.estado === 'aceptado') {
+    veredicto($('pantalla-validador'), 'ok', `Pago aceptado · ${Money.formato(r.montoCentimos)}`, `Al pasajero le quedan ${Money.formato(r.saldoDelPasajeroCentimos)}. Puede pasar.`);
+    apuntar('validador', 'Verifica la firma del emisor, la del teléfono y las cuentas. Todo sin internet.', `recibo ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
+  } else if (r.estado === 'ya_cobrado') {
+    veredicto($('pantalla-validador'), 'aviso', 'Ese QR ya se cobró', 'No es un pago nuevo. No lo dejes pasar.');
+    apuntar('validador', 'Reconoce el QR como ya cobrado. No suma dinero.', null, 'mala');
+  } else {
+    veredicto($('pantalla-validador'), 'mal', 'Pago rechazado', r.motivo);
+    apuntar('validador', `Rechaza el pago: ${r.motivo}`, null, 'mala');
+  }
+  pagoActual = null;
+  retoActual = null;
+  refrescar();
+});
+
+$('btn-subir').addEventListener('click', async () => {
+  const recibos = mundo.bus.recibosPendientes;
+  const ids = await mundo.servidor.subirRecibos(mundo.bus.config.validatorId, recibos);
+  mundo.servidor.reconciliar();
+  mundo.bus.limpiarLiquidados(ids);
+  const liq = mundo.servidor.liquidar('don-enrique');
+  $('liq-pasajes').textContent = String(liq.pasajes);
+  $('liq-bruto').textContent = Money.formato(liq.brutoCentimos);
+  $('liq-comision').textContent = Money.formato(liq.comisionCentimos);
+  $('liq-neto').textContent = Money.formato(liq.netoCentimos);
+  apuntar('servidor', `Recibe ${ids.length} recibo(s) firmado(s) y ordena el pago al dueño de la unidad.`, `neto ${Money.formato(liq.netoCentimos)} en bolívares`, 'destacada');
+  refrescar();
+});
+
+$('btn-sincronizar').addEventListener('click', async () => {
+  const ack = await mundo.servidor.sincronizarMonedero(mundo.walletId, mundo.maria.pendientes);
+  await mundo.maria.aplicarAck(ack);
+  mundo.servidor.reconciliar();
+  apuntar('servidor', `Recibe ${ack.confirmados.length} gasto(s) del teléfono y le repone el cupo sin sincronizar.`, null, 'destacada');
+  refrescar();
+});
+
+$('btn-reiniciar').addEventListener('click', async () => {
+  $('lineas').innerHTML = '';
+  evento = 0;
+  for (const id of ['liq-pasajes']) $(id).textContent = '0';
+  for (const id of ['liq-bruto', 'liq-comision', 'liq-neto']) $(id).textContent = '0,00 Bs';
+  await arrancar();
+  apuntar('servidor', 'Escenario nuevo: claves nuevas, monedero vacío.');
+});
+
+for (const id of ['in-pasaje', 'in-recarga', 'in-tope', 'in-viajes']) {
+  $(id).addEventListener('input', refrescar);
+}
+
+// ---------- ataques ----------
+
+$('atq-saldo').addEventListener('click', async () => {
+  apuntar('ataque', 'Un atacante genera su propia pareja de claves y se firma un vale de 100.000 Bs, poniéndole el identificador del emisor real.');
+  const falso = await generarClaves();
+  const t = ahora();
+  const grant = {
+    grantId: 'g-falso', walletId: mundo.walletId,
+    deviceKeyFingerprint: mundo.maria.huella,
+    amountCentimos: 100000_00, currency: 'VES',
+    issuedAtEpochSec: t, expiresAtEpochSec: t + 86400,
+    offlineSpendCapCentimos: 100000_00, offlineTripCap: 999,
+    issuerKeyId: mundo.servidor.emisorKeyId, nonce: 'x',
+  };
+  const vale = { grant, signature: await firmar(falso.privateKey, bytesDelVale(grant)) };
+  const r = await mundo.maria.cargarVale(vale);
+  apuntar('pasajero', `El propio teléfono lo rechaza: ${r.motivo}`, 'La firma no la produjo la clave privada del emisor, que solo existe en el servidor.', 'mala');
+  apuntar('validador', 'Y si el atacante parchea su app para saltarse esa comprobación, el validador lo rechaza igual en el autobús: verifica la misma firma.', null, 'mala');
+  refrescar();
+});
+
+$('atq-pantallazo').addEventListener('click', async () => {
+  if (!pantallazoGuardado) {
+    apuntar('ataque', 'Primero hay que hacer un pago normal, para tener un pantallazo que reusar.');
+    return;
+  }
+  apuntar('ataque', 'El pasajero guardó el QR de un pago anterior y lo muestra en el siguiente viaje.');
+  await mundo.bus.nuevoReto();
+  const r = await mundo.bus.aceptar(decodificarGasto(pantallazoGuardado));
+  const texto = r.estado === 'ya_cobrado' ? 'Ese QR ya se cobró' : r.motivo;
+  veredicto($('pantalla-validador'), 'mal', 'No sirve', texto);
+  apuntar('validador', `Rechazado: ${texto}`, 'Cada cobro lleva un número de un solo uso; un QR viejo no responde a ninguno vivo.', 'mala');
+  refrescar();
+});
+
+$('atq-doble').addEventListener('click', async () => {
+  if (mundo.maria.saldoCentimos === 0) {
+    apuntar('ataque', 'Hace falta saldo cargado para intentar gastarlo dos veces.');
+    return;
+  }
+  apuntar('ataque', 'El pasajero rootea el teléfono y copia el monedero ANTES de pagar.');
+  const respaldo = mundo.maria.respaldar();
+
+  const otroBus = await Validador.crear(mundo.servidor, {
+    validatorId: 'v-bus07', unitId: 'bus-07', ownerId: 'doña-carmen',
+    routeId: 'ruta-01', fareCentimos: mundo.bus.config.fareCentimos,
+  });
+
+  const retoA = await mundo.bus.nuevoReto();
+  const pagoA = await mundo.maria.pagar(decodificarReto(retoA.qr));
+  if (!pagoA.ok) { apuntar('pasajero', `No pudo pagar: ${pagoA.motivo}`, null, 'mala'); return; }
+  await mundo.bus.aceptar(pagoA.gasto);
+  apuntar('validador', 'El bus-14 cobra de buena fe. Sin internet no tiene forma de saber nada más.');
+
+  mundo.maria.restaurar(respaldo);
+  apuntar('ataque', 'Restaura el respaldo: el teléfono vuelve a creer que no ha gastado.');
+
+  const retoB = await otroBus.nuevoReto();
+  const pagoB = await mundo.maria.pagar(decodificarReto(retoB.qr));
+  await otroBus.aceptar(pagoB.gasto);
+  apuntar('validador', 'El bus-07 también cobra de buena fe. El ataque funcionó… mientras no haya señal.');
+
+  await mundo.servidor.subirRecibos('v-bus14', mundo.bus.recibosPendientes);
+  await mundo.servidor.subirRecibos('v-bus07', otroBus.recibosPendientes);
+  const informe = mundo.servidor.reconciliar();
+
+  if (informe.doblesGastos.length > 0) {
+    const p = informe.doblesGastos[0];
+    apuntar('servidor', `Al reconciliar aparece la bifurcación: dos gastos distintos en el movimiento #${p.seq} de la misma cadena.`, `${p.ramaA.token.unitId} y ${p.ramaB.token.unitId} · las dos ramas firmadas por ${p.walletId}`, 'destacada');
+    apuntar('servidor', `Monedero ${p.walletId} bloqueado. La pérdida sale de su saldo retenido, no del bolsillo del chofer.`, 'A los dos dueños se les paga igual: prestaron el servicio.', 'destacada');
+    veredicto($('pantalla-validador'), 'aviso', 'Fraude detectado al reconciliar', `Las dos firmas son del propio ${p.walletId}. Queda bloqueado y no puede recargar más.`);
+  }
+  refrescar();
+});
+
+$('atq-cobrador').addEventListener('click', async () => {
+  apuntar('ataque', 'Alguien imprime su propio QR de cobro y lo pega en la pared, para cobrar pasajes sin prestar el servicio.');
+  const pirata = await generarClaves();
+  const t = ahora();
+  const cert = {
+    validatorId: 'v-pirata', unitId: 'bus-pirata', ownerId: 'el-vivo',
+    publicKeyFingerprint: await huellaDeClave(pirata.publicKeyEncoded),
+    issuedAtEpochSec: t, expiresAtEpochSec: t + 86400,
+    issuerKeyId: mundo.servidor.emisorKeyId,
+  };
+  const challenge = {
+    validatorId: 'v-pirata', unitId: 'bus-pirata', ownerId: 'el-vivo', routeId: 'ruta-01',
+    fareCentimos: mundo.bus.config.fareCentimos, challengeNonce: nonce(),
+    issuedAtEpochSec: t, ttlSeconds: 45, validatorKeyId: 'v-pirata',
+  };
+  const retoFalso = {
+    challenge,
+    signature: await firmar(pirata.privateKey, bytesDelReto(challenge)),
+    validatorPublicKey: pirata.publicKeyEncoded,
+    cert: { cert, signature: await firmar(pirata.privateKey, bytesDelCertificado(cert)) },
+  };
+  const r = await mundo.maria.pagar(retoFalso);
+  veredicto($('pantalla-pasajero'), 'mal', 'No pagues', r.motivo || 'Cobrador no registrado');
+  apuntar('pasajero', `El teléfono avisa antes de pagar: ${r.motivo}`, 'El certificado del validador tiene que venir firmado por el emisor, y este se lo firmó él mismo.', 'mala');
+  refrescar();
+});
+
+await arrancar();
+apuntar('servidor', 'Escenario listo. Recarga con internet y después córtalo.');
+</script>

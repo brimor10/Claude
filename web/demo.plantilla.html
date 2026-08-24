@@ -1,0 +1,680 @@
+<title>Pana Pago</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground: #eff1ee;
+    --surface: #ffffff;
+    --surface-2: #f6f8f5;
+    --ink: #121c1b;
+    --ink-2: #4c5a56;
+    --line: #d3dad5;
+    --line-fuerte: #b6c0ba;
+    --accent: #0d6b60;
+    --accent-suave: #deece9;
+    --sobre-accent: #ffffff;
+    --signal: #a85c0b;
+    --signal-suave: #f7ead9;
+    --ok: #256b46;
+    --ok-suave: #dcece3;
+    --danger: #9c2016;
+    --danger-suave: #f6e0dd;
+    --sombra: 0 1px 2px rgba(18, 28, 27, .06), 0 8px 24px -16px rgba(18, 28, 27, .28);
+
+    --display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    --prosa: 'Newsreader', Georgia, 'Times New Roman', serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d1413;
+      --surface: #151f1d;
+      --surface-2: #1b2624;
+      --ink: #e4ebe8;
+      --ink-2: #94a39f;
+      --line: #253230;
+      --line-fuerte: #384945;
+      --accent: #43a89a;
+      --accent-suave: #15302c;
+      --sobre-accent: #05211d;
+      --signal: #dfa059;
+      --signal-suave: #33261696;
+      --ok: #5ab480;
+      --ok-suave: #12301f;
+      --danger: #e0776a;
+      --danger-suave: #34181499;
+      --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0d1413;
+    --surface: #151f1d;
+    --surface-2: #1b2624;
+    --ink: #e4ebe8;
+    --ink-2: #94a39f;
+    --line: #253230;
+    --line-fuerte: #384945;
+    --accent: #43a89a;
+    --accent-suave: #15302c;
+    --sobre-accent: #05211d;
+    --signal: #dfa059;
+    --signal-suave: #33261696;
+    --ok: #5ab480;
+    --ok-suave: #12301f;
+    --danger: #e0776a;
+    --danger-suave: #34181499;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--display);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .envoltorio { max-width: 1140px; margin: 0 auto; padding: 32px 20px 96px; }
+
+  /* ---------- encabezado ---------- */
+
+  .cabecera { display: flex; flex-wrap: wrap; gap: 20px 32px; align-items: flex-end; justify-content: space-between; padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+  .titulo { font-size: clamp(30px, 5vw, 46px); font-weight: 700; letter-spacing: -.025em; margin: 0; line-height: 1; text-wrap: balance; }
+  .subtitulo { font-family: var(--prosa); font-size: 17px; color: var(--ink-2); margin: 10px 0 0; max-width: 54ch; }
+  .aviso-demo { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--signal); border: 1px solid currentColor; border-radius: 2px; padding: 6px 10px; white-space: nowrap; }
+
+  /* ---------- barra de estado ---------- */
+
+  .estado { position: sticky; top: 0; z-index: 20; margin: 0 -20px 28px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; }
+  .estado::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--accent); transition: background .25s; }
+  body.sin-senal .estado::before { background: var(--signal); }
+  .medidor { display: flex; flex-direction: column; gap: 1px; }
+  .medidor dt { font-size: 10px; letter-spacing: .11em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+  .medidor dd { margin: 0; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .estado .crece { margin-left: auto; }
+
+  .senal { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; padding: 7px 13px; border-radius: 999px; border: 1px solid; cursor: pointer; background: var(--accent-suave); color: var(--accent); border-color: transparent; font-family: inherit; }
+  body.sin-senal .senal { background: var(--signal-suave); color: var(--signal); }
+  .senal .punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  body.sin-senal .senal .punto { background: none; box-shadow: inset 0 0 0 2px currentColor; }
+
+  /* ---------- retícula ---------- */
+
+  .rejilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .rejilla { grid-template-columns: minmax(0, 1fr); } }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--sombra); overflow: hidden; }
+  .panel > header { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .panel h2 { margin: 0; font-size: 13px; letter-spacing: .11em; text-transform: uppercase; font-weight: 700; }
+  .panel .rotulo { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .panel .cuerpo { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ---------- pantalla del aparato ---------- */
+
+  .pantalla { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; min-height: 268px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 18px; text-align: center; }
+  .pantalla canvas { width: 100%; max-width: 226px; height: auto; image-rendering: pixelated; border-radius: 2px; background: #fff; padding: 6px; }
+  .pantalla .vacio { font-family: var(--prosa); color: var(--ink-2); font-size: 15px; max-width: 30ch; }
+  .pantalla .pie { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+  .pantalla .monto { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+
+  .veredicto { width: 100%; border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+  .veredicto.ok { background: var(--ok-suave); color: var(--ok); }
+  .veredicto.aviso { background: var(--signal-suave); color: var(--signal); }
+  .veredicto.mal { background: var(--danger-suave); color: var(--danger); }
+  .veredicto strong { font-size: 15px; letter-spacing: .02em; }
+  .veredicto span { font-family: var(--prosa); font-size: 14px; color: inherit; opacity: .88; }
+
+  /* ---------- controles ---------- */
+
+  .botones { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { font-family: var(--display); font-size: 14px; font-weight: 600; padding: 10px 15px; border-radius: 4px; border: 1px solid var(--line-fuerte); background: var(--surface); color: var(--ink); cursor: pointer; transition: background .15s, border-color .15s, transform .06s; }
+  button:hover:not(:disabled) { border-color: var(--ink-2); background: var(--surface-2); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button.principal { background: var(--accent); border-color: var(--accent); color: var(--sobre-accent); }
+  button.principal:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+  button:disabled { opacity: .38; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; }
+  .campo { display: flex; flex-direction: column; gap: 5px; }
+  .campo label { font-size: 10px; letter-spacing: .11em; text-transform: uppercase; color: var(--ink-2); font-weight: 600; }
+  .campo input { font-family: var(--mono); font-size: 15px; padding: 9px 11px; border-radius: 4px; border: 1px solid var(--line-fuerte); background: var(--surface); color: var(--ink); width: 100%; }
+  .campo .nota { font-family: var(--prosa); font-size: 13px; color: var(--ink-2); }
+  .campo .nota.alerta { color: var(--danger); font-weight: 500; }
+
+  /* ---------- prosa ---------- */
+
+  .nota-larga { font-family: var(--prosa); font-size: 16px; color: var(--ink-2); max-width: 68ch; }
+  .nota-larga strong { color: var(--ink); font-weight: 500; }
+
+  /* ---------- ataques ---------- */
+
+  .ataques { margin-top: 20px; }
+  .ataques .cuerpo { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 12px; }
+  .ataque { text-align: left; padding: 14px; display: flex; flex-direction: column; gap: 5px; height: 100%; }
+  .ataque b { font-size: 14px; font-weight: 600; }
+  .ataque em { font-family: var(--prosa); font-style: normal; font-size: 13.5px; color: var(--ink-2); font-weight: 400; line-height: 1.4; }
+
+  /* ---------- bitácora ---------- */
+
+  .bitacora { margin-top: 20px; }
+  .bitacora .cuerpo { padding: 0; }
+  .lineas { max-height: 340px; overflow-y: auto; overflow-x: auto; }
+  .linea { display: grid; grid-template-columns: 62px 106px minmax(0, 1fr); gap: 14px; padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 13.5px; align-items: baseline; }
+  .linea:last-child { border-bottom: 0; }
+  .linea .t { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .linea .quien { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; font-weight: 700; }
+  .linea .quien.servidor { color: var(--accent); }
+  .linea .quien.pasajero { color: var(--ink); }
+  .linea .quien.validador { color: var(--ink); }
+  .linea .quien.ataque { color: var(--danger); }
+  .linea .que { min-width: 0; }
+  .linea .que code { font-family: var(--mono); font-size: 12px; color: var(--ink-2); word-break: break-all; display: block; margin-top: 2px; }
+  .linea.destacada { background: var(--accent-suave); }
+  .linea.mala { background: var(--danger-suave); }
+
+  /* ---------- liquidación ---------- */
+
+  .liquidacion table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .liquidacion td { padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .liquidacion td:last-child { text-align: right; font-weight: 600; }
+  .liquidacion tr:last-child td { border-bottom: 0; font-size: 19px; padding-top: 14px; }
+
+  .pie-pagina { margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--line); font-family: var(--prosa); font-size: 14.5px; color: var(--ink-2); max-width: 72ch; }
+  .pie-pagina p { margin: 0 0 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="envoltorio">
+
+  <header class="cabecera">
+    <div>
+      <h1 class="titulo">Pana&nbsp;Pago</h1>
+      <p class="subtitulo">Pago de pasaje que funciona sin internet. Recargas con señal, el saldo queda bloqueado en el teléfono, y se gasta por QR aunque no haya datos. Aquí puedes operarlo tú mismo, y tratar de robarlo.</p>
+    </div>
+    <span class="aviso-demo">Demostración · claves de juguete</span>
+  </header>
+
+  <dl class="estado">
+    <button class="senal" id="btn-senal" type="button" aria-live="polite">
+      <span class="punto" aria-hidden="true"></span><span id="txt-senal">Con internet</span>
+    </button>
+    <div class="medidor"><dt>Saldo del pasajero</dt><dd id="m-saldo">0,00 Bs</dd></div>
+    <div class="medidor"><dt>Gastable sin señal</dt><dd id="m-offline">0,00 Bs</dd></div>
+    <div class="medidor"><dt>Viajes sin sincronizar</dt><dd id="m-pendientes">0</dd></div>
+    <div class="medidor crece"><dt>Acumulado del cobrador</dt><dd id="m-acumulado">0,00 Bs</dd></div>
+  </dl>
+
+  <section class="panel" style="margin-bottom:20px">
+    <header><h2>Parámetros</h2><span class="rotulo">Se aplican a la próxima recarga</span></header>
+    <div class="cuerpo">
+      <div class="campos">
+        <div class="campo">
+          <label for="in-pasaje">Pasaje (Bs)</label>
+          <input id="in-pasaje" type="text" inputmode="decimal" value="235.00">
+          <span class="nota" id="nota-pasaje"></span>
+        </div>
+        <div class="campo">
+          <label for="in-recarga">Recarga (Bs)</label>
+          <input id="in-recarga" type="text" inputmode="decimal" value="5000.00">
+          <span class="nota">Lo que el usuario mete cuando tiene señal.</span>
+        </div>
+        <div class="campo">
+          <label for="in-tope">Tope sin sincronizar (Bs)</label>
+          <input id="in-tope" type="text" inputmode="decimal" value="2350.00">
+          <span class="nota" id="nota-tope"></span>
+        </div>
+        <div class="campo">
+          <label for="in-viajes">Tope de viajes sin sincronizar</label>
+          <input id="in-viajes" type="text" inputmode="numeric" value="30">
+          <span class="nota">El que se agote primero manda.</span>
+        </div>
+      </div>
+      <p class="nota-larga">El tope sin sincronizar es <strong>la pérdida máxima</strong> que puede causar un teléfono comprometido antes de que el sistema lo bloquee. Bajarlo reduce el riesgo y molesta más a quien anda sin señal; subirlo hace lo contrario. Es la perilla del negocio, y por eso está aquí arriba.</p>
+      <div class="botones">
+        <button class="principal" id="btn-recargar" type="button">Recargar saldo</button>
+        <button id="btn-sincronizar" type="button">Sincronizar</button>
+        <button id="btn-reiniciar" type="button">Empezar de nuevo</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="rejilla">
+    <section class="panel">
+      <header><h2>Teléfono del pasajero</h2><span class="rotulo" id="rot-pasajero">María</span></header>
+      <div class="cuerpo">
+        <div class="pantalla" id="pantalla-pasajero">
+          <p class="vacio">Sin saldo todavía. Recarga arriba, con internet.</p>
+        </div>
+        <div class="botones">
+          <button class="principal" id="btn-pagar" type="button" disabled>Escanear el QR del cobrador y pagar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header><h2>Validador de la unidad</h2><span class="rotulo" id="rot-validador">bus-14 · don Enrique</span></header>
+      <div class="cuerpo">
+        <div class="pantalla" id="pantalla-validador">
+          <p class="vacio">Listo para cobrar. Genera un QR de cobro.</p>
+        </div>
+        <div class="botones">
+          <button class="principal" id="btn-cobrar" type="button">Cobrar pasaje</button>
+          <button id="btn-leer" type="button" disabled>Leer el pago</button>
+          <button id="btn-subir" type="button" disabled>Subir recibos</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel ataques">
+    <header><h2>Trata de robarlo</h2><span class="rotulo">Cada botón ejecuta el ataque de verdad</span></header>
+    <div class="cuerpo">
+      <button class="ataque" id="atq-saldo" type="button">
+        <b>Inventar saldo</b>
+        <em>Fabricar un vale de 100.000 Bs firmándolo con una clave propia, haciéndose pasar por el emisor.</em>
+      </button>
+      <button class="ataque" id="atq-pantallazo" type="button">
+        <b>Pagar con un pantallazo</b>
+        <em>Guardar el QR de un pago que ya se hizo y volver a mostrarlo en el siguiente viaje.</em>
+      </button>
+      <button class="ataque" id="atq-doble" type="button">
+        <b>Restaurar un respaldo</b>
+        <em>Copiar el monedero antes de pagar, gastar en un autobús, restaurar y gastar lo mismo en otro.</em>
+      </button>
+      <button class="ataque" id="atq-cobrador" type="button">
+        <b>Cobrador falso</b>
+        <em>Pegar en la pared un QR de cobro hecho por cualquiera, para cobrar pasajes sin prestar el servicio.</em>
+      </button>
+    </div>
+  </section>
+
+  <section class="panel bitacora">
+    <header><h2>Bitácora del protocolo</h2><span class="rotulo" id="rot-bitacora">0 eventos</span></header>
+    <div class="cuerpo"><div class="lineas" id="lineas"></div></div>
+  </section>
+
+  <section class="panel liquidacion" style="margin-top:20px">
+    <header><h2>Lo que cobra el dueño de la unidad</h2><span class="rotulo">Se paga en bolívares</span></header>
+    <div class="cuerpo">
+      <table>
+        <tbody>
+          <tr><td>Pasajes cobrados y subidos</td><td id="liq-pasajes">0</td></tr>
+          <tr><td>Bruto</td><td id="liq-bruto">0,00 Bs</td></tr>
+          <tr><td>Comisión del operador (3%)</td><td id="liq-comision">0,00 Bs</td></tr>
+          <tr><td>A pagar a don Enrique</td><td id="liq-neto">0,00 Bs</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="pie-pagina">
+    <p><strong>Esto no es una maqueta.</strong> Los QR de esta página son códigos reales, generados con un codificador verificado contra la biblioteca <em>segno</em> en las 40 versiones y leído sin fallos por <em>zxing-cpp</em>, el mismo motor que usan los teléfonos Android. Puedes apuntarle con la cámara.</p>
+    <p>Las firmas son ECDSA P-256 con SHA-256 hechas con la criptografía del navegador, y la serialización es idéntica byte a byte a la de la app en Kotlin: hay una prueba automática que toma un escenario firmado aquí y lo valida con el código de producción.</p>
+    <p>Lo único de mentira es el emisor: en esta página vive dentro del navegador y su clave privada es pública. En producción esa clave va en un HSM y nadie la ve.</p>
+  </footer>
+</div>
+
+<script type="module">
+/*__MODULOS__*/
+
+// =====================================================================
+//  Interfaz de la demostracion
+// =====================================================================
+
+const $ = (id) => document.getElementById(id);
+
+// Tasa de cambio SUPUESTA, solo para orientar. Sale de los números que dio el
+// cliente (un pasaje de 0,30 US$ equivale a 235 Bs). No la usa el protocolo:
+// todo el dinero se maneja en céntimos de bolívar.
+const CAMBIO_SUPUESTO = 783;
+const cuerpo = document.body;
+
+let mundo = null;
+let retoActual = null;
+let pagoActual = null;
+let pantallazoGuardado = null;
+let conectado = true;
+let evento = 0;
+
+const dibujarEn = (contenedor, texto, pie) => {
+  contenedor.innerHTML = '';
+  const lienzo = document.createElement('canvas');
+  contenedor.appendChild(lienzo);
+  drawQr(lienzo, texto, { scale: 4, quiet: 3 });
+  if (pie) {
+    const p = document.createElement('p');
+    p.className = 'pie';
+    p.textContent = pie;
+    contenedor.appendChild(p);
+  }
+};
+
+const vaciar = (contenedor, mensaje) => {
+  contenedor.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'vacio';
+  p.textContent = mensaje;
+  contenedor.appendChild(p);
+};
+
+const veredicto = (contenedor, clase, titulo, detalle) => {
+  contenedor.innerHTML = '';
+  const caja = document.createElement('div');
+  caja.className = `veredicto ${clase}`;
+  const t = document.createElement('strong');
+  t.textContent = titulo;
+  const d = document.createElement('span');
+  d.textContent = detalle;
+  caja.append(t, d);
+  contenedor.appendChild(caja);
+};
+
+function apuntar(quien, texto, dato = null, clase = '') {
+  evento += 1;
+  const linea = document.createElement('div');
+  linea.className = `linea ${clase}`;
+  const t = document.createElement('div');
+  t.className = 't';
+  t.textContent = String(evento).padStart(3, '0');
+  const q = document.createElement('div');
+  q.className = `quien ${quien}`;
+  q.textContent = quien;
+  const que = document.createElement('div');
+  que.className = 'que';
+  que.textContent = texto;
+  if (dato) {
+    const c = document.createElement('code');
+    c.textContent = dato;
+    que.appendChild(c);
+  }
+  linea.append(t, q, que);
+  $('lineas').appendChild(linea);
+  linea.scrollIntoView({ block: 'nearest' });
+  $('rot-bitacora').textContent = `${evento} evento${evento === 1 ? '' : 's'}`;
+}
+
+const leerMonto = (id, porDefecto) => {
+  try {
+    return Money.desdeBolivares($(id).value);
+  } catch {
+    return porDefecto;
+  }
+};
+
+function refrescar() {
+  const w = mundo?.maria;
+  $('m-saldo').textContent = Money.formato(w ? w.saldoCentimos : 0);
+  $('m-offline').textContent = Money.formato(w ? w.gastableOfflineCentimos : 0);
+  $('m-pendientes').textContent = w ? String(w.pendientes.length) : '0';
+  $('m-acumulado').textContent = Money.formato(mundo?.bus ? mundo.bus.acumuladoCentimos : 0);
+
+  $('btn-recargar').disabled = !conectado;
+  $('btn-sincronizar').disabled = !conectado || !w || w.pendientes.length === 0;
+  $('btn-pagar').disabled = !w || w.saldoCentimos === 0 || !retoActual;
+  $('btn-leer').disabled = !pagoActual;
+  $('btn-subir').disabled = !conectado || !mundo?.bus || mundo.bus.recibosPendientes.length === 0;
+
+  const pasaje = leerMonto('in-pasaje', 0);
+  const tope = leerMonto('in-tope', 0);
+  $('nota-pasaje').textContent = pasaje > 0
+    ? `≈ ${(pasaje / 100 / CAMBIO_SUPUESTO).toFixed(2)} US$ con el cambio a ${CAMBIO_SUPUESTO} Bs/US$.`
+    : 'Escribe un monto válido.';
+  const nota = $('nota-tope');
+  if (tope > 0 && pasaje > 0 && tope < pasaje) {
+    nota.className = 'nota alerta';
+    nota.textContent = `No alcanza ni para un pasaje: nadie podría pagar sin señal.`;
+  } else if (tope > 0 && pasaje > 0) {
+    nota.className = 'nota';
+    nota.textContent = `${Math.floor(tope / pasaje)} viajes sin conectarse. Es la pérdida máxima por teléfono.`;
+  } else {
+    nota.className = 'nota';
+    nota.textContent = 'Escribe un monto válido.';
+  }
+}
+
+async function arrancar() {
+  const politica = {
+    ...POLITICA_POR_DEFECTO,
+    topeOfflineCentimos: leerMonto('in-tope', 2350_00),
+    topeDeViajesOffline: Number($('in-viajes').value) || 30,
+  };
+  const servidor = await new Servidor(politica).iniciar();
+  const maria = await Monedero.crear(servidor.anclas);
+  const walletId = await servidor.registrarMonedero(maria.claves.publicKeyEncoded, 'w-maria');
+  const bus = await Validador.crear(servidor, {
+    validatorId: 'v-bus14', unitId: 'bus-14', ownerId: 'don-enrique',
+    routeId: 'ruta-01', fareCentimos: leerMonto('in-pasaje', 235_00),
+  });
+  mundo = { servidor, maria, walletId, bus };
+  retoActual = null;
+  pagoActual = null;
+  pantallazoGuardado = null;
+  vaciar($('pantalla-pasajero'), 'Sin saldo todavía. Recarga arriba, con internet.');
+  vaciar($('pantalla-validador'), 'Listo para cobrar. Genera un QR de cobro.');
+  refrescar();
+}
+
+// ---------- acciones ----------
+
+$('btn-senal').addEventListener('click', () => {
+  conectado = !conectado;
+  cuerpo.classList.toggle('sin-senal', !conectado);
+  $('txt-senal').textContent = conectado ? 'Con internet' : 'Sin señal';
+  apuntar('servidor', conectado ? 'Vuelve la conexión.' : 'Se cae la conexión. A partir de aquí nadie habla con el servidor.');
+  refrescar();
+});
+
+$('btn-recargar').addEventListener('click', async () => {
+  const monto = leerMonto('in-recarga', 5000_00);
+  mundo.servidor.politica.topeOfflineCentimos = leerMonto('in-tope', 2350_00);
+  mundo.servidor.politica.topeDeViajesOffline = Number($('in-viajes').value) || 30;
+  mundo.bus.config.fareCentimos = leerMonto('in-pasaje', 235_00);
+
+  const vale = await mundo.servidor.recargar(mundo.walletId, monto);
+  const carga = await mundo.maria.cargarVale(vale);
+  if (!carga.ok) {
+    apuntar('pasajero', `Recarga rechazada: ${carga.motivo}`, null, 'mala');
+    return;
+  }
+  apuntar('servidor', `Cobra ${Money.formato(monto)}, retiene el dinero y firma un vale amarrado a la clave de este teléfono.`, `vale ${vale.grant.grantId} · tope sin sincronizar ${Money.formato(vale.grant.offlineSpendCapCentimos)}`, 'destacada');
+  vaciar($('pantalla-pasajero'), `Saldo cargado y bloqueado: ${Money.formato(monto)}. Ya puedes cortar el internet.`);
+  refrescar();
+});
+
+$('btn-cobrar').addEventListener('click', async () => {
+  mundo.bus.config.fareCentimos = leerMonto('in-pasaje', 235_00);
+  const reto = await mundo.bus.nuevoReto();
+  retoActual = reto;
+  pagoActual = null;
+  dibujarEn($('pantalla-validador'), reto.qr, `Cobro de ${Money.formato(reto.firmado.challenge.fareCentimos)} · vence en ${reto.firmado.challenge.ttlSeconds} s`);
+  apuntar('validador', 'Muestra un QR de cobro nuevo, con un número de un solo uso que vence en 45 segundos.', `${reto.qr.slice(0, 46)}…  (${reto.qr.length} caracteres)`);
+  refrescar();
+});
+
+$('btn-pagar').addEventListener('click', async () => {
+  const reto = decodificarReto(retoActual.qr);
+  const pago = await mundo.maria.pagar(reto);
+  if (!pago.ok) {
+    veredicto($('pantalla-pasajero'), 'mal', 'No se pudo pagar', pago.motivo);
+    apuntar('pasajero', `El teléfono se niega a pagar: ${pago.motivo}`, null, 'mala');
+    refrescar();
+    return;
+  }
+  pagoActual = pago;
+  pantallazoGuardado = pago.qr;
+  dibujarEn($('pantalla-pasajero'), pago.qr, `Pagado ${Money.formato(pago.gasto.token.amountCentimos)} · muéstraselo al cobrador`);
+  apuntar('pasajero', 'Verifica el certificado del cobrador, descuenta el saldo y firma el pago. Sin tocar el servidor.', `movimiento #${pago.gasto.token.seq} · quedan ${Money.formato(pago.gasto.token.balanceAfterCentimos)}`, 'destacada');
+  refrescar();
+});
+
+$('btn-leer').addEventListener('click', async () => {
+  const gasto = decodificarGasto(pagoActual.qr);
+  const r = await mundo.bus.aceptar(gasto);
+  if (r.estado === 'aceptado') {
+    veredicto($('pantalla-validador'), 'ok', `Pago aceptado · ${Money.formato(r.montoCentimos)}`, `Al pasajero le quedan ${Money.formato(r.saldoDelPasajeroCentimos)}. Puede pasar.`);
+    apuntar('validador', 'Verifica la firma del emisor, la del teléfono y las cuentas. Todo sin internet.', `recibo ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
+  } else if (r.estado === 'ya_cobrado') {
+    veredicto($('pantalla-validador'), 'aviso', 'Ese QR ya se cobró', 'No es un pago nuevo. No lo dejes pasar.');
+    apuntar('validador', 'Reconoce el QR como ya cobrado. No suma dinero.', null, 'mala');
+  } else {
+    veredicto($('pantalla-validador'), 'mal', 'Pago rechazado', r.motivo);
+    apuntar('validador', `Rechaza el pago: ${r.motivo}`, null, 'mala');
+  }
+  pagoActual = null;
+  retoActual = null;
+  refrescar();
+});
+
+$('btn-subir').addEventListener('click', async () => {
+  const recibos = mundo.bus.recibosPendientes;
+  const ids = await mundo.servidor.subirRecibos(mundo.bus.config.validatorId, recibos);
+  mundo.servidor.reconciliar();
+  mundo.bus.limpiarLiquidados(ids);
+  const liq = mundo.servidor.liquidar('don-enrique');
+  $('liq-pasajes').textContent = String(liq.pasajes);
+  $('liq-bruto').textContent = Money.formato(liq.brutoCentimos);
+  $('liq-comision').textContent = Money.formato(liq.comisionCentimos);
+  $('liq-neto').textContent = Money.formato(liq.netoCentimos);
+  apuntar('servidor', `Recibe ${ids.length} recibo(s) firmado(s) y ordena el pago al dueño de la unidad.`, `neto ${Money.formato(liq.netoCentimos)} en bolívares`, 'destacada');
+  refrescar();
+});
+
+$('btn-sincronizar').addEventListener('click', async () => {
+  const ack = await mundo.servidor.sincronizarMonedero(mundo.walletId, mundo.maria.pendientes);
+  await mundo.maria.aplicarAck(ack);
+  mundo.servidor.reconciliar();
+  apuntar('servidor', `Recibe ${ack.confirmados.length} gasto(s) del teléfono y le repone el cupo sin sincronizar.`, null, 'destacada');
+  refrescar();
+});
+
+$('btn-reiniciar').addEventListener('click', async () => {
+  $('lineas').innerHTML = '';
+  evento = 0;
+  for (const id of ['liq-pasajes']) $(id).textContent = '0';
+  for (const id of ['liq-bruto', 'liq-comision', 'liq-neto']) $(id).textContent = '0,00 Bs';
+  await arrancar();
+  apuntar('servidor', 'Escenario nuevo: claves nuevas, monedero vacío.');
+});
+
+for (const id of ['in-pasaje', 'in-recarga', 'in-tope', 'in-viajes']) {
+  $(id).addEventListener('input', refrescar);
+}
+
+// ---------- ataques ----------
+
+$('atq-saldo').addEventListener('click', async () => {
+  apuntar('ataque', 'Un atacante genera su propia pareja de claves y se firma un vale de 100.000 Bs, poniéndole el identificador del emisor real.');
+  const falso = await generarClaves();
+  const t = ahora();
+  const grant = {
+    grantId: 'g-falso', walletId: mundo.walletId,
+    deviceKeyFingerprint: mundo.maria.huella,
+    amountCentimos: 100000_00, currency: 'VES',
+    issuedAtEpochSec: t, expiresAtEpochSec: t + 86400,
+    offlineSpendCapCentimos: 100000_00, offlineTripCap: 999,
+    issuerKeyId: mundo.servidor.emisorKeyId, nonce: 'x',
+  };
+  const vale = { grant, signature: await firmar(falso.privateKey, bytesDelVale(grant)) };
+  const r = await mundo.maria.cargarVale(vale);
+  apuntar('pasajero', `El propio teléfono lo rechaza: ${r.motivo}`, 'La firma no la produjo la clave privada del emisor, que solo existe en el servidor.', 'mala');
+  apuntar('validador', 'Y si el atacante parchea su app para saltarse esa comprobación, el validador lo rechaza igual en el autobús: verifica la misma firma.', null, 'mala');
+  refrescar();
+});
+
+$('atq-pantallazo').addEventListener('click', async () => {
+  if (!pantallazoGuardado) {
+    apuntar('ataque', 'Primero hay que hacer un pago normal, para tener un pantallazo que reusar.');
+    return;
+  }
+  apuntar('ataque', 'El pasajero guardó el QR de un pago anterior y lo muestra en el siguiente viaje.');
+  await mundo.bus.nuevoReto();
+  const r = await mundo.bus.aceptar(decodificarGasto(pantallazoGuardado));
+  const texto = r.estado === 'ya_cobrado' ? 'Ese QR ya se cobró' : r.motivo;
+  veredicto($('pantalla-validador'), 'mal', 'No sirve', texto);
+  apuntar('validador', `Rechazado: ${texto}`, 'Cada cobro lleva un número de un solo uso; un QR viejo no responde a ninguno vivo.', 'mala');
+  refrescar();
+});
+
+$('atq-doble').addEventListener('click', async () => {
+  if (mundo.maria.saldoCentimos === 0) {
+    apuntar('ataque', 'Hace falta saldo cargado para intentar gastarlo dos veces.');
+    return;
+  }
+  apuntar('ataque', 'El pasajero rootea el teléfono y copia el monedero ANTES de pagar.');
+  const respaldo = mundo.maria.respaldar();
+
+  const otroBus = await Validador.crear(mundo.servidor, {
+    validatorId: 'v-bus07', unitId: 'bus-07', ownerId: 'doña-carmen',
+    routeId: 'ruta-01', fareCentimos: mundo.bus.config.fareCentimos,
+  });
+
+  const retoA = await mundo.bus.nuevoReto();
+  const pagoA = await mundo.maria.pagar(decodificarReto(retoA.qr));
+  if (!pagoA.ok) { apuntar('pasajero', `No pudo pagar: ${pagoA.motivo}`, null, 'mala'); return; }
+  await mundo.bus.aceptar(pagoA.gasto);
+  apuntar('validador', 'El bus-14 cobra de buena fe. Sin internet no tiene forma de saber nada más.');
+
+  mundo.maria.restaurar(respaldo);
+  apuntar('ataque', 'Restaura el respaldo: el teléfono vuelve a creer que no ha gastado.');
+
+  const retoB = await otroBus.nuevoReto();
+  const pagoB = await mundo.maria.pagar(decodificarReto(retoB.qr));
+  await otroBus.aceptar(pagoB.gasto);
+  apuntar('validador', 'El bus-07 también cobra de buena fe. El ataque funcionó… mientras no haya señal.');
+
+  await mundo.servidor.subirRecibos('v-bus14', mundo.bus.recibosPendientes);
+  await mundo.servidor.subirRecibos('v-bus07', otroBus.recibosPendientes);
+  const informe = mundo.servidor.reconciliar();
+
+  if (informe.doblesGastos.length > 0) {
+    const p = informe.doblesGastos[0];
+    apuntar('servidor', `Al reconciliar aparece la bifurcación: dos gastos distintos en el movimiento #${p.seq} de la misma cadena.`, `${p.ramaA.token.unitId} y ${p.ramaB.token.unitId} · las dos ramas firmadas por ${p.walletId}`, 'destacada');
+    apuntar('servidor', `Monedero ${p.walletId} bloqueado. La pérdida sale de su saldo retenido, no del bolsillo del chofer.`, 'A los dos dueños se les paga igual: prestaron el servicio.', 'destacada');
+    veredicto($('pantalla-validador'), 'aviso', 'Fraude detectado al reconciliar', `Las dos firmas son del propio ${p.walletId}. Queda bloqueado y no puede recargar más.`);
+  }
+  refrescar();
+});
+
+$('atq-cobrador').addEventListener('click', async () => {
+  apuntar('ataque', 'Alguien imprime su propio QR de cobro y lo pega en la pared, para cobrar pasajes sin prestar el servicio.');
+  const pirata = await generarClaves();
+  const t = ahora();
+  const cert = {
+    validatorId: 'v-pirata', unitId: 'bus-pirata', ownerId: 'el-vivo',
+    publicKeyFingerprint: await huellaDeClave(pirata.publicKeyEncoded),
+    issuedAtEpochSec: t, expiresAtEpochSec: t + 86400,
+    issuerKeyId: mundo.servidor.emisorKeyId,
+  };
+  const challenge = {
+    validatorId: 'v-pirata', unitId: 'bus-pirata', ownerId: 'el-vivo', routeId: 'ruta-01',
+    fareCentimos: mundo.bus.config.fareCentimos, challengeNonce: nonce(),
+    issuedAtEpochSec: t, ttlSeconds: 45, validatorKeyId: 'v-pirata',
+  };
+  const retoFalso = {
+    challenge,
+    signature: await firmar(pirata.privateKey, bytesDelReto(challenge)),
+    validatorPublicKey: pirata.publicKeyEncoded,
+    cert: { cert, signature: await firmar(pirata.privateKey, bytesDelCertificado(cert)) },
+  };
+  const r = await mundo.maria.pagar(retoFalso);
+  veredicto($('pantalla-pasajero'), 'mal', 'No pagues', r.motivo || 'Cobrador no registrado');
+  apuntar('pasajero', `El teléfono avisa antes de pagar: ${r.motivo}`, 'El certificado del validador tiene que venir firmado por el emisor, y este se lo firmó él mismo.', 'mala');
+  refrescar();
+});
+
+await arrancar();
+apuntar('servidor', 'Escenario listo. Recarga con internet y después córtalo.');
+</script>

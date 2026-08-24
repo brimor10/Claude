@@ -8,3 +8,9 @@ captures/
 *.apk
 *.keystore
 !debug.keystore
+
+# Generados por las herramientas de web/ y tools/
+node_modules/
+package-lock.json
+web/demo.bundle.js
+web/captura-*.png

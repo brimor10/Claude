@@ -9,7 +9,8 @@ bolívares.
 
 | Módulo | Qué es | Estado |
 |---|---|---|
-| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 32 pruebas** |
+| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 35 pruebas** |
+| `web/` | Demostración operable en el navegador: el mismo protocolo en JavaScript. | **Probada en Chromium de punta a punta** |
 | `:app` | App Android (Compose): modo pasajero y modo cobrador. | **Escrito, sin compilar** — ver aviso abajo |
 
 > **Aviso honesto:** el módulo `:app` se escribió pero **no se ha compilado ni
@@ -19,11 +20,36 @@ bolívares.
 > abrirlo por primera vez en Android Studio. Toda la lógica de dinero y de
 > seguridad vive en `:core`, que sí está compilado y probado.
 
+## Verlo funcionando
+
+Abre `web/demo.html` en cualquier navegador (o publícalo donde quieras: es un
+solo archivo autocontenido). Puedes recargar saldo, **cortar el internet**,
+cobrar y pagar por QR, y después reconectar y ver la liquidación en bolívares.
+Hay cuatro botones para tratar de robarlo.
+
+No es una maqueta:
+
+- Los QR son códigos reales, con un generador verificado contra `segno` en las
+  40 versiones y leído sin fallos por `zxing-cpp`, el motor que usa Android.
+  Puedes apuntarle con la cámara del teléfono.
+- Las firmas son ECDSA P-256 con SHA-256 hechas con la criptografía del
+  navegador, y la serialización es **idéntica byte a byte** a la de la app: la
+  prueba `CompatibilidadWebTest` toma un escenario firmado por el JavaScript y
+  lo valida con el código Kotlin de producción.
+
+Lo único de mentira es el emisor, que en la página vive dentro del navegador con
+la clave privada a la vista.
+
 ## Cómo correr las pruebas
 
 ```bash
-./gradlew :core:test
+./gradlew :core:test          # el protocolo: 35 pruebas
+python3 tools/verificar-qr.py # el generador de QR
+node tools/probar-demo.mjs    # la demostración web, en Chromium
 ```
+
+Las dos últimas necesitan dependencias que se listan en
+[`tools/LEEME.md`](tools/LEEME.md).
 
 No hace falta el SDK de Android: `settings.gradle.kts` desactiva el módulo `:app`
 cuando no encuentra `ANDROID_HOME`, `ANDROID_SDK_ROOT` ni `sdk.dir` en
@@ -53,6 +79,8 @@ reconcilia, detecta fraudes y le paga al dueño de la unidad en bolívares.
 - [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) — modelo de amenazas, qué está resuelto
   y qué **no** se puede resolver. Léelo antes de tomar decisiones de negocio.
 - [`docs/PENDIENTE.md`](docs/PENDIENTE.md) — lo que falta para producción.
+- [`tools/LEEME.md`](tools/LEEME.md) — cómo se verifica que la demostración web
+  no miente.
 
 ## Lo que hay que saber antes de seguir
 
