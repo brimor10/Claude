@@ -221,6 +221,31 @@ data class SignedSpend(
     /** Identidad del eslabon para deteccion de bifurcaciones en el servidor. */
     fun linkId(): String = Base64Url.encode(linkHash())
 
+    /**
+     * Codigo de viaje: cuatro cifras que el pasajero y el validador calculan
+     * por separado, cada uno de su lado, a partir de este mismo gasto.
+     *
+     * Resuelve un problema practico que la criptografia sola no resuelve: el
+     * pasajero descuenta el saldo al firmar, pero sin internet no tiene forma
+     * de saber si el aparato del chofer llego a procesar SU pago o si el
+     * escaneo fallo. Si los dos telefonos muestran el mismo numero, el pasajero
+     * sabe que el validador leyo exactamente ese pago y no otro.
+     *
+     * Es una confirmacion para el ojo humano, no una prueba: un chofer
+     * deshonesto podria enseñar el numero sin haber aceptado el cobro. La
+     * prueba de verdad es el recibo firmado que se sube al reconciliar. Para
+     * una confirmacion irrefutable en el momento haria falta un tercer
+     * escaneo (o NFC), a costa de tiempo en la puerta del autobus.
+     */
+    fun tripCode(): String {
+        val h = Hash.sha256(linkHash())
+        val n = ((h[0].toInt() and 0xFF) shl 24) or
+            ((h[1].toInt() and 0xFF) shl 16) or
+            ((h[2].toInt() and 0xFF) shl 8) or
+            (h[3].toInt() and 0xFF)
+        return ((n.toLong() and 0xFFFFFFFFL) % 10_000).toString().padStart(4, '0')
+    }
+
     override fun equals(other: Any?): Boolean = other is SignedSpend &&
         token == other.token &&
         signature.contentEquals(other.signature) &&

@@ -9,7 +9,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { Monedero, Servidor, Validador } from '../web/motor.js';
-import { b64urlEncode, codificarVale, idDelEslabon } from '../web/protocolo.js';
+import { b64urlEncode, codificarVale, codigoDeViaje, idDelEslabon } from '../web/protocolo.js';
 
 const RELOJ = () => 1_777_000_000; // hora fija, para que el fixture sea estable
 
@@ -62,6 +62,10 @@ const fixtures = {
     // El segundo eslabon apunta al hash del primero: es la cadena que hace
     // demostrable el doble gasto.
     idDelPrimerEslabon: await idDelEslabon(pagos[0].pago.gasto),
+    // Las dos implementaciones tienen que sacar el mismo codigo de viaje: es
+    // lo que el pasajero y el cobrador comparan en la puerta del autobus.
+    codigoDeViajeDelPrimerPago: await codigoDeViaje(pagos[0].pago.gasto),
+    codigoDeViajeDelSegundoPago: await codigoDeViaje(pagos[1].pago.gasto),
   },
 };
 

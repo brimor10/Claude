@@ -73,9 +73,15 @@ comprobar(await pagina.$('#pantalla-pasajero canvas') !== null, 'el teléfono di
 comprobar((await texto('#m-saldo')).includes('4.765,00') || (await texto('#m-saldo')).includes('4765,00'),
   'el saldo se descuenta sin internet');
 
+const codigoPasajero = await pagina.textContent('#pantalla-pasajero .codigo b');
 await pulsar('#btn-leer');
 comprobar((await texto('#pantalla-validador')).includes('Pago aceptado'), 'el validador acepta el pago sin internet');
 comprobar((await texto('#m-acumulado')).includes('235,00'), 'el cobrador acumula el pasaje');
+
+const codigoValidador = await pagina.textContent('#pantalla-validador .codigo b');
+comprobar(/^\d{4}$/.test(codigoPasajero), 'el teléfono muestra un código de viaje de cuatro cifras');
+comprobar(codigoPasajero === codigoValidador,
+  `los dos aparatos calculan el mismo código de viaje (${codigoPasajero} / ${codigoValidador})`);
 
 if (capturas) await pagina.screenshot({ path: 'web/captura-offline.png', fullPage: true });
 

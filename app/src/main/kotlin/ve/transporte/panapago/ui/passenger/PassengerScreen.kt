@@ -60,7 +60,7 @@ fun PassengerScreen(viewModel: PassengerViewModel = viewModel()) {
     }
 
     state.paymentQr?.let { qr ->
-        PaymentQrDialog(qr, state.lastPaidCentimos, viewModel::dismissPaymentQr)
+        PaymentQrDialog(qr, state.lastPaidCentimos, state.tripCode, viewModel::dismissPaymentQr)
     }
 
     Column(
@@ -142,7 +142,12 @@ private fun TopUpCard(enabled: Boolean, onTopUp: (String) -> Unit) {
 }
 
 @Composable
-private fun PaymentQrDialog(qr: String, paidCentimos: Long?, onDismiss: () -> Unit) {
+private fun PaymentQrDialog(
+    qr: String,
+    paidCentimos: Long?,
+    tripCode: String?,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Listo") } },
@@ -157,6 +162,20 @@ private fun PaymentQrDialog(qr: String, paidCentimos: Long?, onDismiss: () -> Un
                         style = MaterialTheme.typography.headlineSmall,
                     )
                 }
+                tripCode?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text("CÓDIGO DE VIAJE", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        "Tiene que ser el mismo que sale en la pantalla del cobrador.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 Text(
                     "El saldo ya se descontó. Al recuperar internet se sincroniza solo.",
                     style = MaterialTheme.typography.bodySmall,

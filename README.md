@@ -9,7 +9,7 @@ bolívares.
 
 | Módulo | Qué es | Estado |
 |---|---|---|
-| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 35 pruebas** |
+| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 36 pruebas** |
 | `web/` | Demostración operable en el navegador: el mismo protocolo en JavaScript. | **Probada en Chromium de punta a punta** |
 | `:app` | App Android (Compose): modo pasajero y modo cobrador. | **Escrito, sin compilar** — ver aviso abajo |
 
@@ -43,7 +43,7 @@ la clave privada a la vista.
 ## Cómo correr las pruebas
 
 ```bash
-./gradlew :core:test          # el protocolo: 35 pruebas
+./gradlew :core:test          # el protocolo: 36 pruebas
 python3 tools/verificar-qr.py # el generador de QR
 node tools/probar-demo.mjs    # la demostración web, en Chromium
 ```
@@ -81,6 +81,10 @@ reconcilia, detecta fraudes y le paga al dueño de la unidad en bolívares.
 - [`docs/PENDIENTE.md`](docs/PENDIENTE.md) — lo que falta para producción.
 - [`tools/LEEME.md`](tools/LEEME.md) — cómo se verifica que la demostración web
   no miente.
+- [`docs/RESUMEN-PARA-REVISION.md`](docs/RESUMEN-PARA-REVISION.md) — explicación
+  completa y autocontenida, para pasársela a un revisor externo: qué se pidió,
+  cómo funciona, qué está probado, qué no está resuelto, y el mapa del asunto
+  regulatorio en Venezuela.
 
 ## Lo que hay que saber antes de seguir
 

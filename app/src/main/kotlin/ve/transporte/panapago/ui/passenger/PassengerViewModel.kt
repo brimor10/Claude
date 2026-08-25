@@ -30,6 +30,8 @@ data class PassengerUiState(
     /** QR de pago listo para mostrarle al cobrador. */
     val paymentQr: String? = null,
     val lastPaidCentimos: Long? = null,
+    /** Cuatro cifras que tienen que coincidir con las de la pantalla del cobrador. */
+    val tripCode: String? = null,
     val scanning: Boolean = false,
     val busy: Boolean = false,
     val message: String? = null,
@@ -132,6 +134,7 @@ class PassengerViewModel(app: Application) : AndroidViewModel(app) {
                         scanning = false,
                         paymentQr = outcome.qr,
                         lastPaidCentimos = outcome.spend.token.amountCentimos,
+                        tripCode = outcome.spend.tripCode(),
                         message = "Pagado ${Money.format(outcome.spend.token.amountCentimos)}. " +
                             "Muestrale este QR al cobrador.",
                     )

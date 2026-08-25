@@ -131,6 +131,21 @@ class CompatibilidadWebTest {
         assertEquals(texto("segundoGastoQr"), QrEnvelope.encode(segundo))
     }
 
+    @Test
+    @DisplayName("Las dos implementaciones sacan el mismo codigo de viaje")
+    fun codigoDeViaje() {
+        // Es lo que el pasajero y el cobrador comparan en la puerta del autobus:
+        // si cada aparato lo calculara distinto, la confirmacion no serviria.
+        assertEquals(
+            texto("codigoDeViajeDelPrimerPago"),
+            QrEnvelope.decodeSpend(texto("gastoQr")).tripCode(),
+        )
+        assertEquals(
+            texto("codigoDeViajeDelSegundoPago"),
+            QrEnvelope.decodeSpend(texto("segundoGastoQr")).tripCode(),
+        )
+    }
+
     private companion object {
         val ARCHIVO = File("../web/fixtures-compatibilidad.json")
     }

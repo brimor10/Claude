@@ -40,7 +40,12 @@ data class ValidatorUiState(
 }
 
 sealed interface ChargeResult {
-    data class Ok(val amount: String, val passengerBalance: String) : ChargeResult
+    data class Ok(
+        val amount: String,
+        val passengerBalance: String,
+        /** Debe coincidir con el que muestra el telefono del pasajero. */
+        val tripCode: String,
+    ) : ChargeResult
     data class AlreadyPaid(val detail: String) : ChargeResult
     data class Rejected(val title: String, val detail: String) : ChargeResult
 }
@@ -129,6 +134,7 @@ class ValidatorViewModel(app: Application) : AndroidViewModel(app) {
             is AcceptResult.Accepted -> ChargeResult.Ok(
                 amount = Money.format(r.fareCentimos),
                 passengerBalance = Money.format(r.passengerBalanceAfterCentimos),
+                tripCode = r.receipt.spend.tripCode(),
             )
 
             is AcceptResult.AlreadyAccepted -> ChargeResult.AlreadyPaid(

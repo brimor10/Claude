@@ -248,6 +248,21 @@ export const bytesDelGasto = (t) => new Escritor(TAG.SPEND)
 export const hashDelEslabon = (gasto) => sha256(bytesDelGasto(gasto.token), gasto.signature);
 export const idDelEslabon = async (gasto) => b64urlEncode(await hashDelEslabon(gasto));
 
+/**
+ * Codigo de viaje: cuatro cifras que el pasajero y el validador calculan por
+ * separado a partir del mismo gasto. Si los dos aparatos muestran el mismo
+ * numero, el pasajero sabe que el cobrador leyo exactamente su pago.
+ *
+ * Es una confirmacion para el ojo humano, no una prueba: la prueba es el
+ * recibo firmado que se sube al reconciliar. Ver SignedSpend.tripCode() en el
+ * core de Kotlin, que calcula exactamente lo mismo.
+ */
+export async function codigoDeViaje(gasto) {
+  const h = await sha256(await hashDelEslabon(gasto));
+  const n = ((h[0] << 24) | (h[1] << 16) | (h[2] << 8) | h[3]) >>> 0;
+  return String(n % 10000).padStart(4, '0');
+}
+
 // --- Codificacion de los QR -------------------------------------------------------
 
 const PREFIJO = 'PP1';

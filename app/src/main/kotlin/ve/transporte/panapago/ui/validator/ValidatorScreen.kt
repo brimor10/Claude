@@ -137,7 +137,7 @@ private fun ResultCard(result: ChargeResult) {
         is ChargeResult.Ok -> Triple(
             Color(0xFF1B5E20),
             "PAGO ACEPTADO — ${result.amount}",
-            "Le queda ${result.passengerBalance}",
+            "Código de viaje ${result.tripCode} · le queda ${result.passengerBalance}",
         )
 
         is ChargeResult.AlreadyPaid -> Triple(

@@ -131,6 +131,9 @@
   .veredicto.aviso { background: var(--signal-suave); color: var(--signal); }
   .veredicto.mal { background: var(--danger-suave); color: var(--danger); }
   .veredicto strong { font-size: 15px; letter-spacing: .02em; }
+  .codigo { display: flex; align-items: baseline; gap: 10px; margin-top: 4px; }
+  .codigo b { font-family: var(--mono); font-size: 30px; font-weight: 500; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
+  .codigo i { font-style: normal; font-size: 10px; letter-spacing: .11em; text-transform: uppercase; font-weight: 600; color: var(--ink-2); }
   .veredicto span { font-family: var(--prosa); font-size: 14px; color: inherit; opacity: .88; }
 
   /* ---------- controles ---------- */
@@ -321,6 +324,7 @@
   </section>
 
   <footer class="pie-pagina">
+    <p><strong>No hace falta Bluetooth ni emparejar nada.</strong> Son dos escaneos con la cámara: el cobrador enseña su QR, el pasajero lo escanea y responde con el suyo. Los dos aparatos están aislados todo el tiempo. Al final ambas pantallas muestran el mismo <em>código de viaje</em> de cuatro cifras, calculado por separado: así el pasajero sabe que le leyeron su pago y no otro.</p>
     <p><strong>Esto no es una maqueta.</strong> Los QR de esta página son códigos reales, generados con un codificador verificado contra la biblioteca <em>segno</em> en las 40 versiones y leído sin fallos por <em>zxing-cpp</em>, el mismo motor que usan los teléfonos Android. Puedes apuntarle con la cámara.</p>
     <p>Las firmas son ECDSA P-256 con SHA-256 hechas con la criptografía del navegador, y la serialización es idéntica byte a byte a la de la app en Kotlin: hay una prueba automática que toma un escenario firmado aquí y lo valida con el código de producción.</p>
     <p>Lo único de mentira es el emisor: en esta página vive dentro del navegador y su clave privada es pública. En producción esa clave va en un HSM y nadie la ve.</p>
@@ -989,6 +993,21 @@ const bytesDelGasto = (t) => new Escritor(TAG.SPEND)
 const hashDelEslabon = (gasto) => sha256(bytesDelGasto(gasto.token), gasto.signature);
 const idDelEslabon = async (gasto) => b64urlEncode(await hashDelEslabon(gasto));
 
+/**
+ * Codigo de viaje: cuatro cifras que el pasajero y el validador calculan por
+ * separado a partir del mismo gasto. Si los dos aparatos muestran el mismo
+ * numero, el pasajero sabe que el cobrador leyo exactamente su pago.
+ *
+ * Es una confirmacion para el ojo humano, no una prueba: la prueba es el
+ * recibo firmado que se sube al reconciliar. Ver SignedSpend.tripCode() en el
+ * core de Kotlin, que calcula exactamente lo mismo.
+ */
+async function codigoDeViaje(gasto) {
+  const h = await sha256(await hashDelEslabon(gasto));
+  const n = ((h[0] << 24) | (h[1] << 16) | (h[2] << 8) | h[3]) >>> 0;
+  return String(n % 10000).padStart(4, '0');
+}
+
 // --- Codificacion de los QR -------------------------------------------------------
 
 const PREFIJO = 'PP1';
@@ -1656,6 +1675,22 @@ const dibujarEn = (contenedor, texto, pie) => {
   }
 };
 
+/**
+ * Codigo de viaje: cuatro cifras que el telefono y el validador calculan por
+ * separado del mismo pago. Si coinciden, el pasajero sabe que el cobrador leyo
+ * SU pago. Es una confirmacion para el ojo, no una prueba criptografica.
+ */
+const pintarCodigo = (contenedor, codigo) => {
+  const caja = document.createElement('p');
+  caja.className = 'codigo';
+  const i = document.createElement('i');
+  i.textContent = 'Código de viaje';
+  const b = document.createElement('b');
+  b.textContent = codigo;
+  caja.append(i, b);
+  contenedor.appendChild(caja);
+};
+
 const vaciar = (contenedor, mensaje) => {
   contenedor.innerHTML = '';
   const p = document.createElement('p');
@@ -1810,6 +1845,7 @@ $('btn-pagar').addEventListener('click', async () => {
   pagoActual = pago;
   pantallazoGuardado = pago.qr;
   dibujarEn($('pantalla-pasajero'), pago.qr, `Pagado ${Money.formato(pago.gasto.token.amountCentimos)} · muéstraselo al cobrador`);
+  pintarCodigo($('pantalla-pasajero'), await codigoDeViaje(pago.gasto));
   apuntar('pasajero', 'Verifica el certificado del cobrador, descuenta el saldo y firma el pago. Sin tocar el servidor.', `movimiento #${pago.gasto.token.seq} · quedan ${Money.formato(pago.gasto.token.balanceAfterCentimos)}`, 'destacada');
   refrescar();
 });
@@ -1818,8 +1854,10 @@ $('btn-leer').addEventListener('click', async () => {
   const gasto = decodificarGasto(pagoActual.qr);
   const r = await mundo.bus.aceptar(gasto);
   if (r.estado === 'aceptado') {
+    const codigo = await codigoDeViaje(gasto);
     veredicto($('pantalla-validador'), 'ok', `Pago aceptado · ${Money.formato(r.montoCentimos)}`, `Al pasajero le quedan ${Money.formato(r.saldoDelPasajeroCentimos)}. Puede pasar.`);
-    apuntar('validador', 'Verifica la firma del emisor, la del teléfono y las cuentas. Todo sin internet.', `recibo ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
+    pintarCodigo($('pantalla-validador'), codigo);
+    apuntar('validador', `Verifica la firma del emisor, la del teléfono y las cuentas. Todo sin internet. El código ${codigo} coincide con el del pasajero.`, `recibo ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
   } else if (r.estado === 'ya_cobrado') {
     veredicto($('pantalla-validador'), 'aviso', 'Ese QR ya se cobró', 'No es un pago nuevo. No lo dejes pasar.');
     apuntar('validador', 'Reconoce el QR como ya cobrado. No suma dinero.', null, 'mala');
