@@ -214,6 +214,37 @@ class CobroDirectoTest {
     }
 
     @Test
+    @DisplayName("Tras subir la tarifa, quien no ha tenido señal todavia puede pagar")
+    fun ventanaDeTransicionDeTarifa() {
+        val w = World()
+        val p = w.newPassenger("sin-datos")
+        w.topUp(p, Money.fromBolivares("5000.00"))
+
+        // El pasajero genera su QR con el pasaje que tenia guardado.
+        val directo = p.book.present(235_00) as PresentOutcome.Approved
+
+        // Mientras tanto la tarifa subio. Sin ventana de transicion se quedaria
+        // en tierra, que es justo lo que no puede pasar en un sistema pensado
+        // para gente sin datos.
+        val sinVentana = w.newValidator("bus-nuevo", "don-enrique", fareCentimos = 260_00)
+        assertEquals(
+            RejectReason.MONTO_NO_COINCIDE_CON_EL_PASAJE,
+            (sinVentana.accept(directo.qr) as AcceptResult.Rejected).reason,
+        )
+
+        val conVentana = w.newValidator(
+            "bus-transicion", "don-enrique",
+            fareCentimos = 260_00,
+            previousFares = listOf(235_00),
+        )
+        val r = conVentana.accept(directo.qr)
+        assertTrue(r is AcceptResult.Accepted, "con ventana de transicion debio pasar: $r")
+        // Se cobra lo que el pasajero firmo, no la tarifa nueva: la diferencia
+        // la absorbe el operador durante la transicion.
+        assertEquals(235_00L, (r as AcceptResult.Accepted).fareCentimos)
+    }
+
+    @Test
     @DisplayName("El monto tiene que ser el pasaje de la unidad")
     fun montoDistintoAlPasaje() {
         val w = World()

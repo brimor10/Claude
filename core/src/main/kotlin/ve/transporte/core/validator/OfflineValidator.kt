@@ -25,6 +25,21 @@ data class ValidatorConfig(
     val ownerId: String,
     val routeId: String,
     val fareCentimos: Long,
+    /**
+     * Pasajes anteriores que esta unidad todavia acepta en el modo de cobro
+     * directo, mientras dura la transicion tras una subida de tarifa.
+     *
+     * Hace falta porque en el modo directo el telefono firma el monto SIN haber
+     * hablado con la unidad: usa el pasaje que tenia guardado la ultima vez que
+     * tuvo señal. En un pais donde las tarifas suben seguido, un pasajero sin
+     * datos desde hace unos dias llegaria con el monto viejo y se quedaria en
+     * tierra, justo en el caso para el que se hizo el sistema.
+     *
+     * Con la ventana de transicion el pasajero pasa, y la diferencia la absorbe
+     * el operador o se le cobra despues. El modo de dos escaneos no necesita
+     * esto: ahi el monto lo pone la unidad en el momento.
+     */
+    val previousFaresCentimos: List<Long> = emptyList(),
     /** Vida del QR del validador. Corto = menos margen para fotografiarlo y reusarlo. */
     val challengeTtlSeconds: Int = 45,
     /** Tolerancia de desfase de reloj del telefono del pasajero. */
@@ -255,7 +270,8 @@ class OfflineValidator(
         comprobacionesComunes(spend, now)?.let { return it }
         repeticion(spend)?.let { return it }
 
-        if (t.amountCentimos != config.fareCentimos) {
+        val pasajesAceptados = listOf(config.fareCentimos) + config.previousFaresCentimos
+        if (t.amountCentimos !in pasajesAceptados) {
             return AcceptResult.Rejected(
                 RejectReason.MONTO_NO_COINCIDE_CON_EL_PASAJE,
                 "pago ${Money.format(t.amountCentimos)}, pasaje ${Money.format(config.fareCentimos)}",

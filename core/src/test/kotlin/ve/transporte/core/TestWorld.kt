@@ -54,6 +54,7 @@ class World(
         fareCentimos: Long = 5_00,
         ttlSeconds: Int = 45,
         acceptPresented: Boolean = true,
+        previousFares: List<Long> = emptyList(),
     ): OfflineValidator {
         val signer = JvmSigner.generate("val-$unitId")
         val validatorId = "v-$unitId"
@@ -68,6 +69,7 @@ class World(
                 fareCentimos = fareCentimos,
                 challengeTtlSeconds = ttlSeconds,
                 acceptPresented = acceptPresented,
+                previousFaresCentimos = previousFares,
             ),
             signer = signer,
             cert = cert,
