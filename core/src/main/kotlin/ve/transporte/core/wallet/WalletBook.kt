@@ -76,7 +76,7 @@ class WalletBook(
      * Modo de cobro directo: genera el QR que el pasajero enseña para que lo lea
      * el lector de la unidad. Ver [OfflineWallet.present] para lo que implica.
      */
-    fun present(fareCentimos: Long, windowSeconds: Int = 90): PresentOutcome {
+    fun present(fareCentimos: Long, windowSeconds: Int = 30): PresentOutcome {
         if (purses.isEmpty()) {
             return PresentOutcome.Denied(DenyReason.SIN_SALDO_CARGADO, "no hay saldo recargado")
         }

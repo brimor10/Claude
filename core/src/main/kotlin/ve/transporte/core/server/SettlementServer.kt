@@ -34,6 +34,25 @@ data class IssuancePolicy(
      * señal y el sistema no sirve para lo que se hizo.
      */
     val offlineCapCeilingCentimos: Long = 2_350_00,
+    /**
+     * Tope de gasto sin sincronizar segun el historial del monedero, en pares
+     * (viajes ya cobrados y reconciliados, tope en centimos).
+     *
+     * Un tope alto e igual para todos desde el primer dia invita a fabricar
+     * cuentas desechables: cada una gasta el tope y se tira. Con tramos, una
+     * cuenta recien nacida solo puede quemar un par de pasajes, y el tope se
+     * gana demostrando recargas y sincronizaciones reales.
+     *
+     * La otra mitad de esa defensa es la atestacion de clave al dar de alta:
+     * obliga a que cada cuenta sea un telefono real con clave de hardware, no
+     * un emulador. Las dos juntas hacen que fabricar cuentas cueste dinero de
+     * verdad.
+     */
+    val offlineCapTiers: List<Pair<Int, Long>> = listOf(
+        0 to 470_00,    // recien dado de alta: dos pasajes
+        5 to 1_175_00,  // con algo de historial: cinco
+        20 to 2_350_00, // usuario asentado: diez
+    ),
     val offlineTripCap: Int = 30,
     /** Comision del operador, en puntos basicos (100 pb = 1 %). */
     val commissionBasisPoints: Int = 300,
@@ -56,6 +75,8 @@ data class WalletAccount(
     var blocked: Boolean = false,
     /** Deuda por doble gasto comprobado. */
     var debtCentimos: Long = 0,
+    /** Viajes ya cobrados y reconciliados. Es lo que le va ganando tope offline. */
+    var settledTrips: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean = other is WalletAccount && walletId == other.walletId
     override fun hashCode(): Int = walletId.hashCode()
@@ -232,7 +253,7 @@ class SettlementServer(
         val now = clock.nowEpochSec()
         val offlineCap = minOf(
             (amountCentimos * policy.offlineCapFraction).toLong(),
-            policy.offlineCapCeilingCentimos,
+            offlineCapFor(account),
         ).coerceAtLeast(0)
 
         val grant = PurseGrant(
@@ -256,6 +277,15 @@ class SettlementServer(
         )
         return SignedGrant(grant, issuer.sign(grant.canonicalBytes()))
     }
+
+    /** Tope de gasto sin sincronizar que le corresponde a esta cuenta hoy. */
+    fun offlineCapFor(account: WalletAccount): Long = minOf(
+        policy.offlineCapTiers
+            .filter { (viajes, _) -> account.settledTrips >= viajes }
+            .maxOfOrNull { (_, tope) -> tope }
+            ?: 0L,
+        policy.offlineCapCeilingCentimos,
+    )
 
     // -- Subida de datos -----------------------------------------------------
 
@@ -310,6 +340,9 @@ class SettlementServer(
             }
 
             record(r.spend, source = "validator:${claim.validatorId}")
+            if (!claimsByLink.containsKey(claim.linkId)) {
+                accounts[r.spend.walletId]?.let { it.settledTrips += 1 }
+            }
             claimsByLink.putIfAbsent(claim.linkId, r)
             if (r.receiptId !in settledReceiptIds) {
                 unsettledReceipts[r.receiptId] = r

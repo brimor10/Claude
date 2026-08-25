@@ -451,9 +451,12 @@ export class Monedero {
    * Ojo con lo que implica: el saldo se descuenta AQUI, al generar el QR, sin
    * saber todavia si alguien va a leerlo. Si el escaneo no ocurre, el servidor
    * devuelve el dinero al reconciliar, porque no habra ningun recibo firmado que
-   * reclame ese pago. Por eso el QR vale solo unos segundos.
+   * reclame ese pago.
+   *
+   * La ventana por defecto son 30 segundos. Es corta a proposito: es el unico
+   * limite que tiene la repeticion en este modo.
    */
-  async presentar(fareCentimos, ventanaSegundos = 90) {
+  async presentar(fareCentimos, ventanaSegundos = 30) {
     if (this.vales.length === 0) return { ok: false, motivo: MOTIVO.SIN_SALDO };
 
     const candidatos = [...this.vales].sort(

@@ -33,7 +33,7 @@ Parámetros que dio el cliente: el pasaje ronda 0,30 US$, equivalente a unos
 
 | Componente | Qué es | Estado |
 |---|---|---|
-| `core` (Kotlin, sin Android) | Protocolo, criptografía, monedero, validador y servidor de liquidación | **Compila, 47 pruebas en verde** |
+| `core` (Kotlin, sin Android) | Protocolo, criptografía, monedero, validador y servidor de liquidación | **Compila, 52 pruebas en verde** |
 | `web/` (JavaScript) | El mismo protocolo, para una demostración operable en el navegador | **Probado de punta a punta en Chromium** |
 | `app` (Android, Compose) | App con modo pasajero y modo cobrador | **Escrito, NUNCA compilado** |
 
@@ -81,7 +81,7 @@ bastante importante como para que la decida el operador, unidad por unidad.
 | | **Modo reto** (dos escaneos) | **Modo directo** (un escaneo) |
 |---|---|---|
 | Velocidad en la puerta | Dos lecturas | Una lectura |
-| Pantallazo reusado | **Imposible** | Posible dentro de una ventana de 90 s |
+| Pantallazo reusado | **Imposible** | Posible en otra unidad, dentro de una ventana de 30 s |
 | Mismo QR en dos unidades | **Imposible** | Posible en la ventana; se detecta al reconciliar |
 | Saldo inventado / de otro teléfono | Imposible | Imposible |
 | Doble gasto por respaldo | Demostrable | Demostrable (misma cadena) |
@@ -277,7 +277,7 @@ y equipo con StrongBox, bajo para un teléfono recién dado de alta.
 
 ## 6. Cómo se verificó (evidencia, no promesas)
 
-- **47 pruebas** en el módulo `core` cubren el flujo completo y los ataques:
+- **52 pruebas** en el módulo `core` cubren el flujo completo y los ataques:
   saldo fantasma, vale alterado, vale de otro teléfono, emisor desconocido,
   doble gasto entre dos unidades, lista negra, validador falso, reloj
   manipulado, topes offline, QR corrupto, persistencia.
@@ -401,7 +401,7 @@ Son las que de verdad interesan; no hace falta opinar sobre el resto.
 
 1. **¿Hay algún ataque que no se haya considerado?** Sobre todo en el modo de
    cobro directo y en el manejo del tiempo sin fuente confiable.
-1b. **¿La ventana de 90 segundos del modo directo es el punto correcto?** Más
+1b. **¿La ventana de 30 segundos del modo directo es el punto correcto?** Más
    corta obliga a regenerar el QR y deja dinero en el aire; más larga amplía el
    margen para pasarle la captura a un amigo.
 2. **El código de viaje de cuatro cifras** como confirmación para el pasajero:

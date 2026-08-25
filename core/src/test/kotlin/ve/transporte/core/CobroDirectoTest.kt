@@ -98,6 +98,72 @@ class CobroDirectoTest {
     }
 
     @Test
+    @DisplayName("Congelar el reloj del telefono NO alarga la ventana del cobro directo")
+    fun relojCongeladoNoSirve() {
+        // Objecion planteada en una revision externa: que un telefono rooteado
+        // podria congelar su hora para que el QR no venza nunca.
+        //
+        // No funciona, y la razon esta en quien manda sobre el tiempo: la ventana
+        // se compara SIEMPRE contra el reloj del validador, que se sincroniza
+        // seguido. Lo que diga el telefono solo entra en los bytes firmados.
+        val relojDelTelefono = TestClock()
+        val w = World()
+        val tramposo = w.newPassenger("tramposo", deviceClock = relojDelTelefono)
+        val bus = w.newValidator("bus-01", "don-enrique", fareCentimos = 5_00)
+        w.topUp(tramposo, Money.fromBolivares("100.00"))
+
+        val directo = tramposo.book.present(5_00, windowSeconds = 30) as PresentOutcome.Approved
+
+        // El tramposo congela su reloj y espera media hora del mundo real.
+        val congelada = relojDelTelefono.now
+        w.clock.advance(1_800)
+        relojDelTelefono.now = congelada
+
+        val r = bus.accept(directo.qr)
+        assertTrue(r is AcceptResult.Rejected, "el reloj congelado no debe servir de nada: $r")
+        assertEquals(RejectReason.PAGO_VENCIDO, (r as AcceptResult.Rejected).reason)
+    }
+
+    @Test
+    @DisplayName("Adelantar el reloj para pre-firmar pagos del futuro tampoco cuela")
+    fun relojAdelantadoNoSirve() {
+        val relojDelTelefono = TestClock()
+        val w = World()
+        val tramposo = w.newPassenger("tramposo", deviceClock = relojDelTelefono)
+        val bus = w.newValidator("bus-01", "don-enrique", fareCentimos = 5_00)
+        w.topUp(tramposo, Money.fromBolivares("100.00"))
+
+        // Adelanta el reloj una hora para fabricar un pago que "vence tarde".
+        relojDelTelefono.now = w.clock.now + 3_600
+        val directo = tramposo.book.present(5_00, windowSeconds = 30) as PresentOutcome.Approved
+
+        val r = bus.accept(directo.qr)
+        assertTrue(r is AcceptResult.Rejected, "un pago del futuro no debe aceptarse: $r")
+        assertEquals(RejectReason.FECHA_FUERA_DE_RANGO, (r as AcceptResult.Rejected).reason)
+    }
+
+    @Test
+    @DisplayName("Compartir el QR con alguien de la MISMA unidad no funciona")
+    fun compartirEnLaMismaUnidad() {
+        // Precision importante sobre el alcance real del ataque: el mismo QR
+        // escaneado dos veces por el mismo aparato se reconoce como ya cobrado.
+        // Para que el fraude funcione hacen falta DOS unidades distintas dentro
+        // de la ventana, que es mucho mas dificil que pasarle la captura al
+        // amigo de al lado.
+        val w = World()
+        val p = w.newPassenger("vivo")
+        val bus = w.newValidator("bus-01", "don-enrique", fareCentimos = 5_00)
+        w.topUp(p, Money.fromBolivares("100.00"))
+
+        val directo = p.book.present(5_00) as PresentOutcome.Approved
+        assertTrue(bus.accept(directo.qr) is AcceptResult.Accepted)
+
+        val segundo = bus.accept(directo.qr)
+        assertTrue(segundo is AcceptResult.AlreadyAccepted, "el amigo de al lado no pasa: $segundo")
+        assertEquals(5_00L, bus.accruedCentimos(), "no debe cobrarse dos veces")
+    }
+
+    @Test
     @DisplayName("Lo que SE PIERDE: dentro de la ventana el mismo QR cuela en dos unidades")
     fun elCostoDelModoDirecto() {
         val w = World()

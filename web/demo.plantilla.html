@@ -265,7 +265,7 @@
           <button class="principal" id="btn-pagar" type="button" disabled>Escanear el QR del cobrador y pagar</button>
           <button id="btn-directo" type="button" disabled>Cobro directo: mostrar mi QR</button>
         </div>
-        <p class="nota-larga" style="font-size:14.5px">Dos modos. <strong>Escanear</strong> son dos lecturas y una captura de pantalla no sirve jamás. <strong>Cobro directo</strong> es una sola lectura —más rápido en la puerta— pero el QR vale 90 segundos y dentro de esa ventana puede colar en dos unidades. Pruébalo con el último botón de abajo.</p>
+        <p class="nota-larga" style="font-size:14.5px">Dos modos. <strong>Escanear</strong> son dos lecturas y una captura de pantalla no sirve jamás. <strong>Cobro directo</strong> es una sola lectura —más rápido en la puerta— pero el QR vale 30 segundos y dentro de esa ventana puede colar en dos unidades. Pruébalo con el último botón de abajo.</p>
       </div>
     </section>
 
@@ -305,7 +305,7 @@
       </button>
       <button class="ataque" id="atq-directo" type="button">
         <b>El mismo QR en dos unidades</b>
-        <em>La debilidad del cobro directo: pasarle la captura a un amigo dentro de los 90 segundos. Cuela dos veces.</em>
+        <em>La debilidad del cobro directo: pasarle la captura a un amigo dentro de los 30 segundos. Cuela dos veces.</em>
       </button>
     </div>
   </section>
@@ -558,9 +558,9 @@ $('btn-directo').addEventListener('click', async () => {
   }
   pagoActual = { qr: directo.qr, gasto: directo.gasto, modo: MODO.DIRECTO };
   pantallazoGuardado = directo.qr;
-  dibujarEn($('pantalla-pasajero'), directo.qr, `Cobro directo de ${Money.formato(directo.gasto.token.amountCentimos)} · vale 90 s`);
+  dibujarEn($('pantalla-pasajero'), directo.qr, `Cobro directo de ${Money.formato(directo.gasto.token.amountCentimos)} · vale 30 s`);
   pintarCodigo($('pantalla-pasajero'), await codigoDeViaje(directo.gasto));
-  apuntar('pasajero', 'Firma el pago sin haber visto al cobrador y descuenta el saldo. Si nadie lo escanea, el servidor se lo devuelve al reconciliar.', `movimiento #${directo.gasto.token.seq} · vence en 90 s`, 'destacada');
+  apuntar('pasajero', 'Firma el pago sin haber visto al cobrador y descuenta el saldo. Si nadie lo escanea, el servidor se lo devuelve al reconciliar.', `movimiento #${directo.gasto.token.seq} · vence en 30 s`, 'destacada');
   refrescar();
 });
 
@@ -705,7 +705,7 @@ $('atq-directo').addEventListener('click', async () => {
     apuntar('ataque', 'Hace falta saldo cargado para probarlo.');
     return;
   }
-  apuntar('ataque', 'El pasajero genera un cobro directo y le pasa la captura a un amigo que va en otra unidad, dentro de los 90 segundos.');
+  apuntar('ataque', 'El pasajero genera un cobro directo y le pasa la captura a un amigo que va en otra unidad, dentro de los 30 segundos.');
 
   const directo = await mundo.maria.presentar(leerMonto('in-pasaje', 235_00));
   if (!directo.ok) {

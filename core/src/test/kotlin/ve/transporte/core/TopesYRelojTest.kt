@@ -86,6 +86,41 @@ class TopesYRelojTest {
     }
 
     @Test
+    @DisplayName("El tope offline se gana con historial: una cuenta nueva casi no puede gastar sin señal")
+    fun topePorHistorial() {
+        // Un tope alto e igual para todos desde el primer dia invita a fabricar
+        // cuentas desechables: cada una quema el tope y se tira. Con tramos, la
+        // cuenta recien nacida solo alcanza para un par de pasajes.
+        val w = World()
+        val nuevo = w.newPassenger("recien-llegado")
+        val bus = w.newValidator("bus-01", "don-enrique", fareCentimos = 235_00)
+        w.topUp(nuevo, Money.fromBolivares("5000.00"))
+
+        assertEquals(5000_00L, nuevo.book.totalBalanceCentimos)
+        assertEquals(470_00L, nuevo.book.offlineSpendableCentimos, "cuenta nueva: dos pasajes")
+
+        // Gasta los dos y el tercero se traba pidiendo conexion.
+        repeat(2) {
+            val pago = nuevo.book.pay(bus.newChallenge())
+            assertTrue(pago is SpendOutcome.Approved)
+            assertTrue(bus.accept((pago as SpendOutcome.Approved).spend) is AcceptResult.Accepted)
+            w.clock.advance(600)
+        }
+        val tercero = nuevo.book.pay(bus.newChallenge())
+        assertEquals(DenyReason.TOPE_OFFLINE_ALCANZADO, (tercero as SpendOutcome.Denied).reason)
+
+        // Al subir los recibos, esos viajes cuentan como historial.
+        w.server.ingestValidatorBatch(bus.config.validatorId, bus.pendingReceipts)
+        w.server.reconcile()
+        assertEquals(2, w.server.account(nuevo.walletId)!!.settledTrips)
+
+        // Con mas historial, el tope sube en la siguiente recarga.
+        val cuenta = w.server.account(nuevo.walletId)!!
+        cuenta.settledTrips = 25
+        assertEquals(2350_00L, w.server.offlineCapFor(cuenta), "usuario asentado: diez pasajes")
+    }
+
+    @Test
     @DisplayName("Atrasar el reloj del telefono no revive un vale vencido")
     fun relojAtrasado() {
         val relojDelTelefono = TestClock()

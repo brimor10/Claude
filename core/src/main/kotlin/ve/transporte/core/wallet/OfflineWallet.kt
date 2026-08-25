@@ -273,13 +273,19 @@ class OfflineWallet(
      * mas corta la ventana, menos dinero queda en el aire y menos margen hay para
      * enseñar el mismo QR en dos unidades.
      *
+     * La ventana por defecto son 30 segundos. Es corta a proposito: es el unico
+     * limite que tiene la repeticion en este modo. Alargarla da tiempo a
+     * mandarle la captura a alguien que va en otra unidad; acortarla mas obliga
+     * a regenerar el QR en la cola, y cada regeneracion consume un eslabon de la
+     * cadena que despues hay que devolver.
+     *
      * @param fareCentimos el pasaje, que en este modo el telefono tiene que
      *   saber de antemano (tarifa plana de la ruta, actualizada al sincronizar).
      */
     fun present(
         state: PurseState?,
         fareCentimos: Long,
-        windowSeconds: Int = 90,
+        windowSeconds: Int = 30,
     ): PresentOutcome {
         if (state == null) {
             return PresentOutcome.Denied(DenyReason.SIN_SALDO_CARGADO, "no hay vale cargado")

@@ -46,7 +46,7 @@ unidad (`ValidatorConfig.acceptPresented`).
 |---|---|---|
 | Cómo va | El cobrador enseña su QR, el pasajero responde con el suyo | El pasajero enseña su QR y el lector de la unidad lo lee |
 | Velocidad en la puerta | Dos lecturas | Una lectura |
-| Pantallazo reusado | **Imposible**: el pago responde a un número que el validador acaba de inventar | Posible **dentro de la ventana** de 90 s |
+| Pantallazo reusado | **Imposible**: el pago responde a un número que el validador acaba de inventar | Posible **en otra unidad** dentro de la ventana de 30 s |
 | Mismo QR en dos unidades | **Imposible**: el pago nombra la unidad | Posible dentro de la ventana; se detecta al reconciliar |
 | Saldo inventado | Imposible | Imposible |
 | Saldo de otro teléfono | Imposible | Imposible |
@@ -56,8 +56,19 @@ unidad (`ValidatorConfig.acceptPresented`).
 **Lo que se pierde exactamente en el modo directo.** El teléfono firma sin saber
 todavía a qué unidad le paga, así que el pago no puede nombrarla. Lo único que
 lo acota es una ventana de tiempo corta, comprobada contra el reloj del
-validador. Dentro de esa ventana, la misma captura mostrada en dos unidades
-cuela las dos veces. No se pierde dinero del pasajero (solo se le cobra un
+validador. Dentro de esa ventana, la misma captura mostrada en **dos unidades
+distintas** cuela las dos veces.
+
+Conviene precisar el alcance, porque suele exagerarse:
+
+- **En la misma unidad no funciona.** El aparato reconoce el eslabón como ya
+  cobrado y lo rechaza. Pasarle la captura al amigo de al lado no sirve de nada.
+- **Manipular el reloj del teléfono tampoco.** La ventana se compara contra el
+  reloj del validador, no contra el del pasajero. Congelar la hora deja el pago
+  vencido; adelantarla lo deja fuera de rango por el otro lado. Las dos cosas
+  están cubiertas por pruebas.
+- Hace falta, entonces, **dos unidades distintas en menos de 30 segundos**, y
+  aun así solo cobra la primera y queda constancia contra ese monedero. No se pierde dinero del pasajero (solo se le cobra un
 pasaje) y el operador solo paga al primero que lo reclame, pero un viaje se
 regala.
 
@@ -138,7 +149,7 @@ para liberarlo. Dos topes a la vez:
 
 | Perilla | Por defecto | Qué acota |
 |---|---|---|
-| `offlineCapCeilingCentimos` | 200,00 Bs | Monto máximo sin sincronizar |
+| `offlineCapCeilingCentimos` | 2.350,00 Bs | Techo absoluto sin sincronizar |
 | `offlineTripCap` | 30 viajes | Viajes máximos sin sincronizar |
 | `grantValiditySeconds` | 30 días | Vida del vale |
 
@@ -148,9 +159,24 @@ el monedero queda bloqueado. Para el defraudador, rootear un teléfono y arriesg
 su cuenta por 200 Bs no da la cuenta.
 
 **Esta es la perilla de negocio.** Bajar el tope reduce el riesgo y molesta más al
-usuario honesto que anda sin señal; subirlo hace lo contrario. Se puede ajustar
-por usuario: a quien tiene historial limpio y equipo con StrongBox, tope alto; a
-un teléfono recién dado de alta, tope bajo.
+usuario honesto que anda sin señal; subirlo hace lo contrario.
+
+### El tope se gana, no se regala
+
+Un tope alto e igual para todos desde el primer día invita a fabricar cuentas
+desechables: cada una quema el tope y se tira. Por eso el tope va por tramos
+según el historial de viajes ya cobrados y reconciliados:
+
+| Viajes con historial | Tope sin sincronizar |
+|---|---|
+| Recién dado de alta | 470,00 Bs (dos pasajes) |
+| 5 o más | 1.175,00 Bs (cinco) |
+| 20 o más | 2.350,00 Bs (diez) |
+
+La otra mitad de esa defensa es la **atestación de clave** al dar de alta:
+obliga a que cada cuenta sea un teléfono real con clave de hardware, no un
+emulador. Las dos juntas hacen que fabricar cuentas cueste dinero de verdad —
+teléfonos, no scripts.
 
 ## 4. Qué frena a la mayoría antes de llegar ahí
 

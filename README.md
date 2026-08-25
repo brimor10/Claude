@@ -9,7 +9,7 @@ bolívares.
 
 | Módulo | Qué es | Estado |
 |---|---|---|
-| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 47 pruebas** |
+| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 52 pruebas** |
 | `web/` | Demostración operable en el navegador: el mismo protocolo en JavaScript. | **Probada en Chromium de punta a punta** |
 | `:app` | App Android (Compose): modo pasajero y modo cobrador. | **Escrito, sin compilar** — ver aviso abajo |
 
@@ -43,7 +43,7 @@ la clave privada a la vista.
 ## Cómo correr las pruebas
 
 ```bash
-./gradlew :core:test          # el protocolo: 47 pruebas
+./gradlew :core:test          # el protocolo: 52 pruebas
 python3 tools/verificar-qr.py # el generador de QR
 node tools/probar-demo.mjs    # la demostración web, en Chromium
 ```
@@ -67,7 +67,7 @@ a la clave de ese teléfono en concreto.
   de un solo uso; el pasajero lo escanea y responde con el suyo. Un pantallazo
   no sirve jamás.
 - **Cobro directo** (una lectura): el pasajero enseña su QR y el lector de la
-  unidad lo lee. Más rápido en la puerta, a cambio de que el pago solo vale 90
+  unidad lo lee. Más rápido en la puerta, a cambio de que el pago solo vale 30
   segundos y dentro de esa ventana puede colar en dos unidades. El costo está
   medido y probado; ver `docs/SEGURIDAD.md`.
 
