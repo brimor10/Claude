@@ -36,10 +36,50 @@ no es extraíble ni con root: lo único que se puede hacer con ella es pedirle
 firmas. Copiar el archivo del monedero a otro teléfono no sirve, porque ese otro
 teléfono no puede producir firmas que el validador acepte.
 
+### Los dos modos de cobro, y qué cuesta cada uno
+
+El sistema admite dos formas de cobrar, y **no son igual de seguras**. La
+diferencia importa lo suficiente como para que la decida el operador, unidad por
+unidad (`ValidatorConfig.acceptPresented`).
+
+| | **Modo reto** (dos escaneos) | **Modo directo** (un escaneo) |
+|---|---|---|
+| Cómo va | El cobrador enseña su QR, el pasajero responde con el suyo | El pasajero enseña su QR y el lector de la unidad lo lee |
+| Velocidad en la puerta | Dos lecturas | Una lectura |
+| Pantallazo reusado | **Imposible**: el pago responde a un número que el validador acaba de inventar | Posible **dentro de la ventana** de 90 s |
+| Mismo QR en dos unidades | **Imposible**: el pago nombra la unidad | Posible dentro de la ventana; se detecta al reconciliar |
+| Saldo inventado | Imposible | Imposible |
+| Saldo de otro teléfono | Imposible | Imposible |
+| Doble gasto por respaldo | Demostrable | Demostrable (misma cadena) |
+| Descuento del saldo | Al pagar, sabiendo a quién | Al generar el QR, sin saber si alguien lo leerá |
+
+**Lo que se pierde exactamente en el modo directo.** El teléfono firma sin saber
+todavía a qué unidad le paga, así que el pago no puede nombrarla. Lo único que
+lo acota es una ventana de tiempo corta, comprobada contra el reloj del
+validador. Dentro de esa ventana, la misma captura mostrada en dos unidades
+cuela las dos veces. No se pierde dinero del pasajero (solo se le cobra un
+pasaje) y el operador solo paga al primero que lo reclame, pero un viaje se
+regala.
+
+Eso se detecta al reconciliar, porque los recibos van **firmados por el
+validador**: dos recibos apuntando al mismo eslabón, de dos unidades distintas,
+son un reclamo duplicado, y queda constancia contra ese monedero.
+
+**Cuándo usar cada uno.** El modo directo para el día a día, donde la velocidad
+en la puerta manda y el fraude posible es un pasaje. El modo reto para pasajes
+caros, rutas problemáticas, o cualquier unidad donde el operador prefiera no
+regalar ni eso.
+
+**Devoluciones.** En el modo directo el saldo se descuenta al generar el QR, sin
+saber si alguien lo leerá. Si el escaneo no ocurre, el servidor lo devuelve al
+reconciliar: no hay ningún recibo firmado que reclame ese pago. Se espera un
+plazo de gracia (24 h por defecto) porque el validador puede tardar en tener
+señal.
+
 ### No se puede pagar con un pantallazo
 
-Cada cobro genera un número de un solo uso que vence en 45 segundos. El vale de
-gasto tiene que incluirlo. Un QR guardado de ayer no responde a ningún cobro
+**En el modo de dos escaneos**, cada cobro genera un número de un solo uso que
+vence en 45 segundos, y el vale de gasto tiene que incluirlo. Un QR guardado de ayer no responde a ningún cobro
 abierto. Y si se vuelve a mostrar el mismo QR, el validador lo reconoce como *ya
 cobrado*, no como pago nuevo.
 

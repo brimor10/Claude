@@ -5,10 +5,15 @@ import ve.transporte.core.crypto.Ec
 import ve.transporte.core.crypto.Hash
 import ve.transporte.core.crypto.Signer
 import ve.transporte.core.crypto.TrustStore
+import ve.transporte.core.protocol.AnySpend
 import ve.transporte.core.protocol.Money
+import ve.transporte.core.protocol.ReceiptClaim
 import ve.transporte.core.protocol.SignedChallenge
+import ve.transporte.core.protocol.SignedPresentedSpend
+import ve.transporte.core.protocol.SignedReceipt
 import ve.transporte.core.protocol.SignedSpend
 import ve.transporte.core.protocol.SignedValidatorCert
+import ve.transporte.core.protocol.SpendMode
 import ve.transporte.core.protocol.ValidatorChallenge
 import ve.transporte.core.protocol.ValidatorReceipt
 import ve.transporte.core.qr.QrEnvelope
@@ -24,6 +29,14 @@ data class ValidatorConfig(
     val challengeTtlSeconds: Int = 45,
     /** Tolerancia de desfase de reloj del telefono del pasajero. */
     val maxClockSkewSeconds: Int = 120,
+    /**
+     * Si esta unidad acepta el modo de cobro directo (un solo escaneo).
+     *
+     * Es mas rapido en la puerta, pero mas debil contra la repeticion: ver
+     * [ve.transporte.core.protocol.PresentedSpendToken]. Se deja como decision
+     * del operador, unidad por unidad.
+     */
+    val acceptPresented: Boolean = true,
 )
 
 enum class RejectReason {
@@ -42,6 +55,12 @@ enum class RejectReason {
     DOBLE_GASTO_DETECTADO,
     MONEDERO_BLOQUEADO,
     FECHA_FUERA_DE_RANGO,
+
+    /** Modo directo: el QR del pasajero ya salio de su ventana de validez. */
+    PAGO_VENCIDO,
+
+    /** Esta unidad no acepta el modo de cobro directo. */
+    MODO_NO_ACEPTADO,
 }
 
 sealed interface AcceptResult {
@@ -49,6 +68,8 @@ sealed interface AcceptResult {
         val receipt: ValidatorReceipt,
         val fareCentimos: Long,
         val passengerBalanceAfterCentimos: Long,
+        val tripCode: String,
+        val mode: SpendMode,
     ) : AcceptResult
 
     /**
@@ -72,13 +93,19 @@ sealed interface AcceptResult {
  * Motor del validador de la unidad (el aparato del chofer).
  *
  * Funciona 100% sin internet. Solo necesita traer, de fabrica o de la ultima
- * sincronizacion:
- *   - las claves publicas del emisor ([TrustStore]),
- *   - su propio certificado firmado,
- *   - la lista negra de monederos bloqueados.
+ * sincronizacion: las claves publicas del emisor ([TrustStore]), su propio
+ * certificado firmado, y la lista negra de monederos bloqueados.
  *
- * Al reconectar sube los recibos, que es lo que dispara el pago en bolivares al
- * dueno de la unidad.
+ * Acepta los dos modos de cobro:
+ *
+ *  - **Modo reto** (dos escaneos): el validador enseña su QR, el pasajero
+ *    responde. Es el mas seguro; una captura de pantalla no sirve nunca.
+ *  - **Modo directo** (un escaneo): el pasajero enseña su QR y el lector de la
+ *    unidad lo lee. Es mas rapido, a cambio de que el pago solo esta amarrado a
+ *    una ventana de tiempo corta en vez de a un reto concreto.
+ *
+ * Al reconectar sube los recibos firmados, que es lo que dispara el pago en
+ * bolivares al dueño de la unidad.
  */
 class OfflineValidator(
     val config: ValidatorConfig,
@@ -105,17 +132,18 @@ class OfflineValidator(
     private var hotlist: Set<String> = emptySet()
 
     /** Bifurcaciones detectadas en sitio: prueba de doble gasto para subir. */
-    private val _fraudEvidence = mutableListOf<Pair<SignedSpend, String>>()
-    val fraudEvidence: List<Pair<SignedSpend, String>> get() = _fraudEvidence.toList()
+    private val _fraudEvidence = mutableListOf<Pair<AnySpend, String>>()
+    val fraudEvidence: List<Pair<AnySpend, String>> get() = _fraudEvidence.toList()
 
     val pendingReceipts: List<ValidatorReceipt> get() = receiptsByLink.values.toList()
 
-    /** Total acumulado a favor del dueno de la unidad, aun sin liquidar. */
+    /** Total acumulado a favor del dueño de la unidad, aun sin liquidar. */
     fun accruedCentimos(): Long = receiptsByLink.values.sumOf { it.amountCentimos }
 
     /**
-     * Genera el QR que se muestra al pasajero. Cada cobro lleva un nonce nuevo:
-     * eso es lo que impide que alguien pague con una captura de pantalla vieja.
+     * Genera el QR que se muestra al pasajero en el modo de dos escaneos. Cada
+     * cobro lleva un nonce nuevo: eso es lo que impide que alguien pague con una
+     * captura de pantalla vieja.
      */
     fun newChallenge(fareCentimos: Long = config.fareCentimos): SignedChallenge {
         val now = clock.nowEpochSec()
@@ -144,65 +172,27 @@ class OfflineValidator(
         hotlist = blockedWalletIds.toSet()
     }
 
-    /** Verifica y cobra un QR de pago. Todo offline. */
-    fun accept(qrText: String): AcceptResult {
-        val spend = try {
-            QrEnvelope.decodeSpend(qrText)
-        } catch (e: QrFormatException) {
-            return AcceptResult.Rejected(RejectReason.QR_ILEGIBLE, e.message ?: "formato")
-        }
-        return accept(spend)
+    /** Lee cualquiera de los dos tipos de QR de pago. */
+    fun accept(qrText: String): AcceptResult = when (QrEnvelope.typeOf(qrText)) {
+        QrEnvelope.TYPE_SPEND -> parse(qrText, QrEnvelope::decodeSpend)?.let(::accept)
+        QrEnvelope.TYPE_PRESENTED -> parse(qrText, QrEnvelope::decodePresented)?.let(::acceptPresented)
+        else -> null
+    } ?: AcceptResult.Rejected(RejectReason.QR_ILEGIBLE, "no es un QR de pago de Pana Pago")
+
+    private fun <T> parse(qrText: String, decoder: (String) -> T): T? = try {
+        decoder(qrText)
+    } catch (_: QrFormatException) {
+        null
     }
 
+    /** Modo reto: el pago responde a un cobro que este aparato acaba de abrir. */
     fun accept(spend: SignedSpend): AcceptResult {
         val now = clock.nowEpochSec()
         purgeExpired(now)
-
-        val g = spend.grant.grant
         val t = spend.token
 
-        // -- 1. El saldo lo emitio el servidor y no ha vencido. -----------------
-        if (!trust.knowsIssuer(g.issuerKeyId)) {
-            return AcceptResult.Rejected(RejectReason.EMISOR_DESCONOCIDO, g.issuerKeyId)
-        }
-        if (!trust.verifyIssuer(g.issuerKeyId, g.canonicalBytes(), spend.grant.signature)) {
-            // Aqui muere el "saldo fantasma": sin la clave privada del servidor
-            // no se puede fabricar un vale que pase por aqui.
-            return AcceptResult.Rejected(RejectReason.FIRMA_DEL_VALE_INVALIDA, g.grantId)
-        }
-        if (now >= g.expiresAtEpochSec) {
-            return AcceptResult.Rejected(RejectReason.VALE_CADUCADO, "vencio en ${g.expiresAtEpochSec}")
-        }
-        if (g.currency != Money.CURRENCY) {
-            return AcceptResult.Rejected(RejectReason.ARITMETICA_INVALIDA, "moneda ${g.currency}")
-        }
+        comprobacionesComunes(spend, now)?.let { return it }
 
-        // -- 2. El gasto lo firmo el telefono al que el servidor le dio el saldo.
-        val deviceFp = Hash.keyFingerprint(spend.devicePublicKey)
-        if (deviceFp != g.deviceKeyFingerprint || deviceFp != t.deviceKeyFingerprint) {
-            return AcceptResult.Rejected(
-                RejectReason.CLAVE_NO_CORRESPONDE_AL_VALE,
-                "el vale no es de este dispositivo",
-            )
-        }
-        val deviceKey = try {
-            Ec.decodePublicKey(spend.devicePublicKey)
-        } catch (e: Exception) {
-            return AcceptResult.Rejected(RejectReason.FIRMA_DE_GASTO_INVALIDA, "clave ilegible")
-        }
-        if (!Ec.verify(deviceKey, t.canonicalBytes(), spend.signature)) {
-            return AcceptResult.Rejected(RejectReason.FIRMA_DE_GASTO_INVALIDA, t.grantId)
-        }
-        if (t.walletId != g.walletId || t.grantId != g.grantId) {
-            return AcceptResult.Rejected(RejectReason.ARITMETICA_INVALIDA, "vale y gasto no casan")
-        }
-
-        // -- 3. Lista negra ------------------------------------------------------
-        if (t.walletId in hotlist) {
-            return AcceptResult.Rejected(RejectReason.MONEDERO_BLOQUEADO, t.walletId)
-        }
-
-        // -- 4. Es para esta unidad ---------------------------------------------
         if (t.validatorId != config.validatorId || t.unitId != config.unitId ||
             t.ownerId != config.ownerId || t.routeId != config.routeId
         ) {
@@ -212,29 +202,8 @@ class OfflineValidator(
             )
         }
 
-        // -- 5. Repeticion / bifurcacion vista por este mismo aparato -----------
-        // Va ANTES de mirar el reto: al aceptar un pago se consume su reto, asi
-        // que un segundo escaneo del mismo QR (camara temblorosa) ya no lo
-        // encontraria y se reportaria como "reto desconocido" en vez de como
-        // duplicado inofensivo.
-        val chainKey = "${t.grantId}#${t.seq}"
-        val linkId = spend.linkId()
-        val previous = seenLinks[chainKey]
-        if (previous != null) {
-            return if (previous == linkId) {
-                AcceptResult.AlreadyAccepted(linkId, receiptsByLink[linkId])
-            } else {
-                // Dos gastos distintos con el mismo numero de secuencia: el
-                // pasajero restauro un respaldo. Queda la prueba firmada por el.
-                _fraudEvidence += spend to "bifurcacion en $chainKey"
-                AcceptResult.Rejected(
-                    RejectReason.DOBLE_GASTO_DETECTADO,
-                    "ya se cobro el movimiento ${t.seq} de este vale",
-                )
-            }
-        }
+        repeticion(spend)?.let { return it }
 
-        // -- 6. Responde a un reto vivo de ESTE aparato -------------------------
         val challenge = openChallenges[t.challengeNonce]
             ?: return AcceptResult.Rejected(
                 RejectReason.RETO_DESCONOCIDO,
@@ -259,31 +228,163 @@ class OfflineValidator(
             )
         }
 
-        // -- 7. Aritmetica comprobable sin conocer toda la cadena ---------------
-        if (t.seq < 1 ||
-            t.amountCentimos <= 0 ||
-            t.balanceAfterCentimos < 0 ||
-            t.balanceAfterCentimos + t.amountCentimos > g.amountCentimos
-        ) {
+        openChallenges.remove(t.challengeNonce)
+        return cobrar(spend, now)
+    }
+
+    /**
+     * Modo directo: el pasajero enseña su QR sin haber visto nada de esta
+     * unidad, y el lector lo escanea de un tiron.
+     *
+     * Aqui no hay reto al que responder, asi que lo que acota la repeticion es
+     * la ventana de tiempo del propio pago, contrastada contra el reloj de este
+     * aparato (que se sincroniza seguido), mas el registro local de eslabones ya
+     * cobrados.
+     */
+    fun acceptPresented(spend: SignedPresentedSpend): AcceptResult {
+        if (!config.acceptPresented) {
             return AcceptResult.Rejected(
-                RejectReason.ARITMETICA_INVALIDA,
-                "seq=${t.seq} monto=${t.amountCentimos} despues=${t.balanceAfterCentimos}",
+                RejectReason.MODO_NO_ACEPTADO,
+                "esta unidad solo cobra mostrando su propio QR primero",
+            )
+        }
+        val now = clock.nowEpochSec()
+        purgeExpired(now)
+        val t = spend.token
+
+        comprobacionesComunes(spend, now)?.let { return it }
+        repeticion(spend)?.let { return it }
+
+        if (t.amountCentimos != config.fareCentimos) {
+            return AcceptResult.Rejected(
+                RejectReason.MONTO_NO_COINCIDE_CON_EL_PASAJE,
+                "pago ${Money.format(t.amountCentimos)}, pasaje ${Money.format(config.fareCentimos)}",
+            )
+        }
+        if (now > t.expiresAtEpochSec() + config.maxClockSkewSeconds) {
+            return AcceptResult.Rejected(
+                RejectReason.PAGO_VENCIDO,
+                "el QR del pasajero vencio hace ${now - t.expiresAtEpochSec()}s, que genere otro",
+            )
+        }
+        if (now < t.validFromEpochSec - config.maxClockSkewSeconds) {
+            return AcceptResult.Rejected(
+                RejectReason.FECHA_FUERA_DE_RANGO,
+                "el QR dice ser del futuro (${t.validFromEpochSec}, aqui son $now)",
             )
         }
 
-        // -- 8. Aceptado --------------------------------------------------------
-        openChallenges.remove(t.challengeNonce)
-        seenLinks[chainKey] = linkId
-        val receipt = ValidatorReceipt(
-            receiptId = linkId,
-            spend = spend,
+        return cobrar(spend, now)
+    }
+
+    /** Lo que se comprueba igual en los dos modos. Devuelve null si todo va bien. */
+    private fun comprobacionesComunes(spend: AnySpend, now: Long): AcceptResult.Rejected? {
+        val g = spend.grant.grant
+
+        if (!trust.knowsIssuer(g.issuerKeyId)) {
+            return AcceptResult.Rejected(RejectReason.EMISOR_DESCONOCIDO, g.issuerKeyId)
+        }
+        if (!trust.verifyIssuer(g.issuerKeyId, g.canonicalBytes(), spend.grant.signature)) {
+            // Aqui muere el "saldo fantasma": sin la clave privada del servidor
+            // no se puede fabricar un vale que pase por aqui.
+            return AcceptResult.Rejected(RejectReason.FIRMA_DEL_VALE_INVALIDA, g.grantId)
+        }
+        if (now >= g.expiresAtEpochSec) {
+            return AcceptResult.Rejected(RejectReason.VALE_CADUCADO, "vencio en ${g.expiresAtEpochSec}")
+        }
+        if (g.currency != Money.CURRENCY) {
+            return AcceptResult.Rejected(RejectReason.ARITMETICA_INVALIDA, "moneda ${g.currency}")
+        }
+
+        val deviceFp = Hash.keyFingerprint(spend.devicePublicKey)
+        if (deviceFp != g.deviceKeyFingerprint || deviceFp != spend.deviceKeyFingerprint) {
+            return AcceptResult.Rejected(
+                RejectReason.CLAVE_NO_CORRESPONDE_AL_VALE,
+                "el vale no es de este dispositivo",
+            )
+        }
+        val deviceKey = try {
+            Ec.decodePublicKey(spend.devicePublicKey)
+        } catch (_: Exception) {
+            return AcceptResult.Rejected(RejectReason.FIRMA_DE_GASTO_INVALIDA, "clave ilegible")
+        }
+        if (!Ec.verify(deviceKey, spend.signedBytes(), spend.signature)) {
+            return AcceptResult.Rejected(RejectReason.FIRMA_DE_GASTO_INVALIDA, spend.grantId)
+        }
+        if (spend.walletId != g.walletId || spend.grantId != g.grantId) {
+            return AcceptResult.Rejected(RejectReason.ARITMETICA_INVALIDA, "vale y gasto no casan")
+        }
+        if (spend.walletId in hotlist) {
+            return AcceptResult.Rejected(RejectReason.MONEDERO_BLOQUEADO, spend.walletId)
+        }
+        if (spend.seq < 1 ||
+            spend.amountCentimos <= 0 ||
+            spend.balanceAfterCentimos < 0 ||
+            spend.balanceAfterCentimos + spend.amountCentimos > g.amountCentimos
+        ) {
+            return AcceptResult.Rejected(
+                RejectReason.ARITMETICA_INVALIDA,
+                "seq=${spend.seq} monto=${spend.amountCentimos} despues=${spend.balanceAfterCentimos}",
+            )
+        }
+        return null
+    }
+
+    /**
+     * Repeticion y bifurcacion vistas por este mismo aparato.
+     *
+     * Va ANTES de mirar el reto: al aceptar un pago se consume su reto, asi que
+     * un segundo escaneo del mismo QR (camara temblorosa) ya no lo encontraria y
+     * se reportaria como "reto desconocido" en vez de como duplicado inofensivo.
+     */
+    private fun repeticion(spend: AnySpend): AcceptResult? {
+        val chainKey = "${spend.grantId}#${spend.seq}"
+        val linkId = spend.linkId()
+        val previous = seenLinks[chainKey] ?: return null
+        return if (previous == linkId) {
+            AcceptResult.AlreadyAccepted(linkId, receiptsByLink[linkId])
+        } else {
+            // Dos gastos distintos con el mismo numero de secuencia: el pasajero
+            // restauro un respaldo. Queda la prueba firmada por el.
+            _fraudEvidence += spend to "bifurcacion en $chainKey"
+            AcceptResult.Rejected(
+                RejectReason.DOBLE_GASTO_DETECTADO,
+                "ya se cobro el movimiento ${spend.seq} de este vale",
+            )
+        }
+    }
+
+    /** Anota el cobro y firma el recibo con el que se reclamara el dinero. */
+    private fun cobrar(spend: AnySpend, now: Long): AcceptResult.Accepted {
+        val linkId = spend.linkId()
+        seenLinks["${spend.grantId}#${spend.seq}"] = linkId
+
+        val claim = ReceiptClaim(
+            linkId = linkId,
             validatorId = config.validatorId,
             unitId = config.unitId,
             ownerId = config.ownerId,
+            routeId = config.routeId,
+            amountCentimos = spend.amountCentimos,
             acceptedAtEpochSec = now,
+            mode = spend.mode,
+        )
+        val receipt = ValidatorReceipt(
+            spend = spend,
+            receipt = SignedReceipt(
+                claim = claim,
+                signature = signer.sign(claim.canonicalBytes()),
+                validatorPublicKey = signer.publicKeyEncoded,
+            ),
         )
         receiptsByLink[linkId] = receipt
-        return AcceptResult.Accepted(receipt, t.amountCentimos, t.balanceAfterCentimos)
+        return AcceptResult.Accepted(
+            receipt = receipt,
+            fareCentimos = spend.amountCentimos,
+            passengerBalanceAfterCentimos = spend.balanceAfterCentimos,
+            tripCode = spend.tripCode(),
+            mode = spend.mode,
+        )
     }
 
     /** Se llama al subir los recibos: el servidor confirma cuales recibio. */

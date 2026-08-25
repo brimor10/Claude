@@ -32,6 +32,8 @@ data class PurseState(
     val offlineTrips: Int = 0,
     /** Gastos aun no confirmados por el servidor. Se suben al reconectar. */
     val pending: List<SignedSpend> = emptyList(),
+    /** Cobros directos pendientes de subir. Algunos pueden acabar devueltos. */
+    val presented: List<ve.transporte.core.protocol.SignedPresentedSpend> = emptyList(),
     /** Retos ya consumidos, para no firmar dos veces el mismo cobro. */
     val usedChallengeNonces: Set<String> = emptySet(),
     /**
@@ -47,6 +49,9 @@ data class PurseState(
         get() = (signedGrant.grant.offlineSpendCapCentimos - offlineSpentCentimos).coerceAtLeast(0)
     val offlineTripsRemaining: Int
         get() = (signedGrant.grant.offlineTripCap - offlineTrips).coerceAtLeast(0)
+
+    /** Todo lo que hay que subir al reconectar, en los dos modos. */
+    val pendingAll: List<ve.transporte.core.protocol.AnySpend> get() = pending + presented
 }
 
 enum class DenyReason {
@@ -77,6 +82,19 @@ sealed interface SpendOutcome {
     ) : SpendOutcome
 
     data class Denied(val reason: DenyReason, val detail: String) : SpendOutcome
+}
+
+sealed interface PresentOutcome {
+    data class Approved(
+        val spend: ve.transporte.core.protocol.SignedPresentedSpend,
+        /** Texto listo para pintar como QR en la pantalla del pasajero. */
+        val qr: String,
+        val newState: PurseState,
+        /** Momento en que este QR deja de valer. */
+        val expiresAtEpochSec: Long,
+    ) : PresentOutcome
+
+    data class Denied(val reason: DenyReason, val detail: String) : PresentOutcome
 }
 
 sealed interface LoadGrantOutcome {
@@ -245,6 +263,86 @@ class OfflineWallet(
     }
 
     /**
+     * Modo de COBRO DIRECTO: genera un QR de pago sin haber visto al cobrador,
+     * para que el lector de la unidad lo escanee de un tiron.
+     *
+     * Ojo con lo que implica: el saldo se descuenta AQUI, al generar el QR, sin
+     * saber todavia si alguien va a leerlo. Si el escaneo no llega a ocurrir, el
+     * servidor devuelve el dinero al reconciliar, porque no habra ningun recibo
+     * firmado que reclame ese pago. Por eso el QR vale solo unos segundos: cuanto
+     * mas corta la ventana, menos dinero queda en el aire y menos margen hay para
+     * enseñar el mismo QR en dos unidades.
+     *
+     * @param fareCentimos el pasaje, que en este modo el telefono tiene que
+     *   saber de antemano (tarifa plana de la ruta, actualizada al sincronizar).
+     */
+    fun present(
+        state: PurseState?,
+        fareCentimos: Long,
+        windowSeconds: Int = 90,
+    ): PresentOutcome {
+        if (state == null) {
+            return PresentOutcome.Denied(DenyReason.SIN_SALDO_CARGADO, "no hay vale cargado")
+        }
+        val g = state.signedGrant.grant
+        val now = maxOf(clock.nowEpochSec(), state.trustedTimeFloorEpochSec)
+
+        if (now >= g.expiresAtEpochSec) {
+            return PresentOutcome.Denied(DenyReason.VALE_CADUCADO, "vence ${g.expiresAtEpochSec}, ahora $now")
+        }
+        if (fareCentimos <= 0) {
+            return PresentOutcome.Denied(DenyReason.PASAJE_INVALIDO, fareCentimos.toString())
+        }
+        if (fareCentimos > state.balanceCentimos) {
+            return PresentOutcome.Denied(
+                DenyReason.SALDO_INSUFICIENTE,
+                "saldo ${Money.format(state.balanceCentimos)}, pasaje ${Money.format(fareCentimos)}",
+            )
+        }
+        if (fareCentimos > state.offlineRemainingCentimos) {
+            return PresentOutcome.Denied(
+                DenyReason.TOPE_OFFLINE_ALCANZADO,
+                "conectate para liberar mas saldo (quedan ${Money.format(state.offlineRemainingCentimos)} offline)",
+            )
+        }
+        if (state.offlineTripsRemaining <= 0) {
+            return PresentOutcome.Denied(
+                DenyReason.TOPE_DE_VIAJES_OFFLINE_ALCANZADO,
+                "${g.offlineTripCap} viajes sin sincronizar",
+            )
+        }
+
+        val token = ve.transporte.core.protocol.PresentedSpendToken(
+            grantId = g.grantId,
+            walletId = g.walletId,
+            seq = state.nextSeq,
+            amountCentimos = fareCentimos,
+            balanceAfterCentimos = state.balanceCentimos - fareCentimos,
+            prevHash = state.lastLinkHash,
+            validFromEpochSec = now,
+            windowSeconds = windowSeconds,
+            nonce = nonceFactory(),
+            deviceKeyFingerprint = deviceFingerprint,
+        )
+        val spend = ve.transporte.core.protocol.SignedPresentedSpend(
+            token = token,
+            signature = signer.sign(token.canonicalBytes()),
+            grant = state.signedGrant,
+            devicePublicKey = signer.publicKeyEncoded,
+        )
+        val newState = state.copy(
+            nextSeq = state.nextSeq + 1,
+            lastLinkHash = spend.linkHash(),
+            spentCentimos = state.spentCentimos + fareCentimos,
+            offlineSpentCentimos = state.offlineSpentCentimos + fareCentimos,
+            offlineTrips = state.offlineTrips + 1,
+            presented = state.presented + spend,
+            trustedTimeFloorEpochSec = now,
+        )
+        return PresentOutcome.Approved(spend, QrEnvelope.encode(spend), newState, token.expiresAtEpochSec())
+    }
+
+    /**
      * Se llama al reconectar, con la respuesta del servidor.
      *
      * Reponer el cupo offline exige haber subido los gastos pendientes: es lo
@@ -254,14 +352,20 @@ class OfflineWallet(
     fun applySync(state: PurseState, ack: SyncAck): PurseState {
         val confirmed = ack.confirmedLinkIds.toSet()
         val stillPending = state.pending.filter { it.linkId() !in confirmed }
+        val stillPresented = state.presented.filter { it.linkId() !in confirmed }
         val floor = maxOf(state.trustedTimeFloorEpochSec, ack.serverTimeEpochSec)
+        val enVuelo = stillPending.sumOf { it.amountCentimos } +
+            stillPresented.sumOf { it.amountCentimos }
         return state.copy(
             pending = stillPending,
+            presented = stillPresented,
             // El cupo offline se repone solo por lo que el servidor confirmo.
-            offlineSpentCentimos = stillPending.sumOf { it.token.amountCentimos },
-            offlineTrips = stillPending.size,
+            offlineSpentCentimos = enVuelo,
+            offlineTrips = stillPending.size + stillPresented.size,
             trustedTimeFloorEpochSec = floor,
-            // El servidor manda sobre el saldo: si detecto algo, aqui se corrige.
+            // El servidor manda sobre el saldo: aqui entran tanto las
+            // correcciones por fraude como las devoluciones de cobros directos
+            // que ningun validador llego a reclamar.
             spentCentimos = ack.authoritativeSpentCentimos ?: state.spentCentimos,
             usedChallengeNonces = if (stillPending.isEmpty()) emptySet() else state.usedChallengeNonces,
         )
@@ -272,6 +376,8 @@ class OfflineWallet(
 data class SyncAck(
     val confirmedLinkIds: List<String>,
     val serverTimeEpochSec: Long,
-    /** Si el servidor corrige el saldo (p. ej. tras detectar un fraude). */
+    /** Si el servidor corrige el saldo (p. ej. tras detectar un fraude o una devolucion). */
     val authoritativeSpentCentimos: Long? = null,
+    /** Cobros directos que nadie reclamo y que se le devuelven al pasajero. */
+    val refundedLinkIds: List<String> = emptyList(),
 )

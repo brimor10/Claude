@@ -8,6 +8,8 @@ import ve.transporte.core.crypto.Base64Url
 import ve.transporte.core.crypto.Ec
 import ve.transporte.core.crypto.Hash
 import ve.transporte.core.crypto.TrustStore
+import ve.transporte.core.protocol.ReceiptClaim
+import ve.transporte.core.protocol.SpendMode
 import ve.transporte.core.qr.QrEnvelope
 import java.io.File
 
@@ -144,6 +146,57 @@ class CompatibilidadWebTest {
             texto("codigoDeViajeDelSegundoPago"),
             QrEnvelope.decodeSpend(texto("segundoGastoQr")).tripCode(),
         )
+    }
+
+    @Test
+    @DisplayName("El core acepta un cobro directo generado por la implementacion web")
+    fun cobroDirecto() {
+        val signed = QrEnvelope.decodePresented(texto("qr"))
+        val t = signed.token
+
+        val deviceKey = Ec.decodePublicKey(signed.devicePublicKey)
+        assertTrue(
+            Ec.verify(deviceKey, t.canonicalBytes(), signed.signature),
+            "la firma del cobro directo no la valida el core",
+        )
+        assertTrue(
+            trust.verifyIssuer(
+                signed.grant.grant.issuerKeyId,
+                signed.grant.grant.canonicalBytes(),
+                signed.grant.signature,
+            ),
+        )
+        assertEquals(numero("seq"), t.seq)
+        assertEquals(numero("montoCentimos"), t.amountCentimos)
+        assertEquals(numero("saldoDespuesCentimos"), t.balanceAfterCentimos)
+        assertEquals(numero("ventanaSegundos").toInt(), t.windowSeconds)
+        assertEquals(texto("codigoDeViaje"), signed.tripCode())
+
+        assertEquals(texto("qr"), QrEnvelope.encode(signed))
+    }
+
+    @Test
+    @DisplayName("El core valida el recibo firmado por el validador")
+    fun reciboFirmado() {
+        // En el modo de cobro directo el recibo es lo unico que dice a que unidad
+        // y a que dueño va el dinero: si las dos implementaciones no firmaran
+        // exactamente los mismos bytes, el servidor no podria cobrarlo.
+        val claim = ReceiptClaim(
+            linkId = texto("linkId"),
+            validatorId = texto("validatorId"),
+            unitId = texto("unitId"),
+            ownerId = texto("ownerId"),
+            routeId = texto("routeId"),
+            amountCentimos = numero("amountCentimos"),
+            acceptedAtEpochSec = numero("acceptedAtEpochSec"),
+            mode = SpendMode.valueOf(texto("mode")),
+        )
+        val validatorKey = Ec.decodePublicKey(Base64Url.decode(texto("clavePublicaDelValidador")))
+        assertTrue(
+            Ec.verify(validatorKey, claim.canonicalBytes(), Base64Url.decode(texto("firma"))),
+            "el core no valida el recibo que firmo la implementacion web",
+        )
+        assertEquals(QrEnvelope.decodePresented(texto("qr")).linkId(), claim.linkId)
     }
 
     private companion object {

@@ -33,7 +33,7 @@ Parámetros que dio el cliente: el pasaje ronda 0,30 US$, equivalente a unos
 
 | Componente | Qué es | Estado |
 |---|---|---|
-| `core` (Kotlin, sin Android) | Protocolo, criptografía, monedero, validador y servidor de liquidación | **Compila, 36 pruebas en verde** |
+| `core` (Kotlin, sin Android) | Protocolo, criptografía, monedero, validador y servidor de liquidación | **Compila, 47 pruebas en verde** |
 | `web/` (JavaScript) | El mismo protocolo, para una demostración operable en el navegador | **Probado de punta a punta en Chromium** |
 | `app` (Android, Compose) | App con modo pasajero y modo cobrador | **Escrito, NUNCA compilado** |
 
@@ -73,7 +73,32 @@ de mensaje), no sobre JSON. Motivo: dos serializadores JSON pueden producir byte
 distintos para el mismo objeto, y peor, se puede mover contenido de un campo a
 otro sin cambiar los bytes, lo que abre ataques de confusión de firma.
 
-### 3.3 El intercambio sin internet: **dos escaneos con la cámara**
+### 3.3 El intercambio sin internet: dos modos
+
+Hay **dos formas de cobrar**, y no son igual de seguras. La diferencia es lo
+bastante importante como para que la decida el operador, unidad por unidad.
+
+| | **Modo reto** (dos escaneos) | **Modo directo** (un escaneo) |
+|---|---|---|
+| Velocidad en la puerta | Dos lecturas | Una lectura |
+| Pantallazo reusado | **Imposible** | Posible dentro de una ventana de 90 s |
+| Mismo QR en dos unidades | **Imposible** | Posible en la ventana; se detecta al reconciliar |
+| Saldo inventado / de otro teléfono | Imposible | Imposible |
+| Doble gasto por respaldo | Demostrable | Demostrable (misma cadena) |
+| Descuento del saldo | Al pagar, sabiendo a quién | Al generar el QR, sin saber si lo leerán |
+
+En el **modo directo** el teléfono firma sin saber todavía a qué unidad le paga,
+así que el pago no puede nombrarla; lo único que lo acota es la ventana de
+tiempo. Dentro de ella, la misma captura mostrada en dos unidades cuela las dos
+veces. Al pasajero se le cobra un solo pasaje y el operador solo paga al primero
+que lo reclame, pero un viaje se regala. Se detecta al reconciliar porque los
+recibos van firmados por el validador: dos recibos apuntando al mismo eslabón
+son un reclamo duplicado.
+
+Además, en el modo directo el saldo se descuenta al generar el QR. Si nadie lo
+lee, el servidor lo devuelve al reconciliar, tras un plazo de gracia.
+
+### 3.3.1 El modo seguro: **dos escaneos con la cámara**
 
 No hace falta Bluetooth, ni NFC, ni emparejar aparatos. Los dos teléfonos están
 aislados todo el tiempo.
@@ -252,7 +277,7 @@ y equipo con StrongBox, bajo para un teléfono recién dado de alta.
 
 ## 6. Cómo se verificó (evidencia, no promesas)
 
-- **36 pruebas** en el módulo `core` cubren el flujo completo y los ataques:
+- **47 pruebas** en el módulo `core` cubren el flujo completo y los ataques:
   saldo fantasma, vale alterado, vale de otro teléfono, emisor desconocido,
   doble gasto entre dos unidades, lista negra, validador falso, reloj
   manipulado, topes offline, QR corrupto, persistencia.
@@ -374,8 +399,11 @@ preguntarlo explícitamente.
 
 Son las que de verdad interesan; no hace falta opinar sobre el resto.
 
-1. **¿Hay algún ataque que no se haya considerado?** Sobre todo en el intercambio
-   de dos escaneos y en el manejo del tiempo sin fuente confiable.
+1. **¿Hay algún ataque que no se haya considerado?** Sobre todo en el modo de
+   cobro directo y en el manejo del tiempo sin fuente confiable.
+1b. **¿La ventana de 90 segundos del modo directo es el punto correcto?** Más
+   corta obliga a regenerar el QR y deja dinero en el aire; más larga amplía el
+   margen para pasarle la captura a un amigo.
 2. **El código de viaje de cuatro cifras** como confirmación para el pasajero:
    ¿es suficiente en la práctica, o hace falta el tercer escaneo con acuse
    firmado desde el principio?

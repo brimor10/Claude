@@ -60,7 +60,13 @@ fun PassengerScreen(viewModel: PassengerViewModel = viewModel()) {
     }
 
     state.paymentQr?.let { qr ->
-        PaymentQrDialog(qr, state.lastPaidCentimos, state.tripCode, viewModel::dismissPaymentQr)
+        PaymentQrDialog(
+            qr = qr,
+            paidCentimos = state.lastPaidCentimos,
+            tripCode = state.tripCode,
+            isDirect = state.paymentIsDirect,
+            onDismiss = viewModel::dismissPaymentQr,
+        )
     }
 
     Column(
@@ -96,7 +102,15 @@ fun PassengerScreen(viewModel: PassengerViewModel = viewModel()) {
             enabled = !state.busy && state.balanceCentimos > 0,
             modifier = Modifier.fillMaxWidth().height(64.dp),
         ) {
-            Text("Pagar pasaje", style = MaterialTheme.typography.titleMedium)
+            Text("Escanear el QR del cobrador", style = MaterialTheme.typography.titleMedium)
+        }
+
+        OutlinedButton(
+            onClick = viewModel::showDirectPayment,
+            enabled = !state.busy && state.balanceCentimos > 0,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+        ) {
+            Text("Cobro directo: mostrar mi QR (${ve.transporte.core.protocol.Money.format(state.fareCentimos)})")
         }
 
         TopUpCard(enabled = !state.busy, onTopUp = viewModel::topUp)
@@ -146,12 +160,17 @@ private fun PaymentQrDialog(
     qr: String,
     paidCentimos: Long?,
     tripCode: String?,
+    isDirect: Boolean,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Listo") } },
-        title = { Text("Muestrale este QR al cobrador") },
+        title = {
+            Text(
+                if (isDirect) "Muéstraselo al lector de la unidad" else "Muéstrale este QR al cobrador",
+            )
+        },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 QrCode(qr, Modifier.fillMaxWidth().aspectRatio(1f))
@@ -177,7 +196,12 @@ private fun PaymentQrDialog(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "El saldo ya se descontó. Al recuperar internet se sincroniza solo.",
+                    if (isDirect) {
+                        "Vale 90 segundos. El saldo ya se descontó: si nadie lo lee, " +
+                            "se te devuelve al sincronizar."
+                    } else {
+                        "El saldo ya se descontó. Al recuperar internet se sincroniza solo."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

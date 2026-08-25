@@ -263,7 +263,9 @@
         </div>
         <div class="botones">
           <button class="principal" id="btn-pagar" type="button" disabled>Escanear el QR del cobrador y pagar</button>
+          <button id="btn-directo" type="button" disabled>Cobro directo: mostrar mi QR</button>
         </div>
+        <p class="nota-larga" style="font-size:14.5px">Dos modos. <strong>Escanear</strong> son dos lecturas y una captura de pantalla no sirve jamás. <strong>Cobro directo</strong> es una sola lectura —más rápido en la puerta— pero el QR vale 90 segundos y dentro de esa ventana puede colar en dos unidades. Pruébalo con el último botón de abajo.</p>
       </div>
     </section>
 
@@ -274,8 +276,8 @@
           <p class="vacio">Listo para cobrar. Genera un QR de cobro.</p>
         </div>
         <div class="botones">
-          <button class="principal" id="btn-cobrar" type="button">Cobrar pasaje</button>
-          <button id="btn-leer" type="button" disabled>Leer el pago</button>
+          <button class="principal" id="btn-cobrar" type="button">Cobrar pasaje (mostrar QR)</button>
+          <button id="btn-leer" type="button" disabled>Leer el QR del pasajero</button>
           <button id="btn-subir" type="button" disabled>Subir recibos</button>
         </div>
       </div>
@@ -300,6 +302,10 @@
       <button class="ataque" id="atq-cobrador" type="button">
         <b>Cobrador falso</b>
         <em>Pegar en la pared un QR de cobro hecho por cualquiera, para cobrar pasajes sin prestar el servicio.</em>
+      </button>
+      <button class="ataque" id="atq-directo" type="button">
+        <b>El mismo QR en dos unidades</b>
+        <em>La debilidad del cobro directo: pasarle la captura a un amigo dentro de los 90 segundos. Cuela dos veces.</em>
       </button>
     </div>
   </section>
@@ -792,7 +798,12 @@ const TAG = {
   CHALLENGE: 'validator-challenge',
   SPEND: 'spend-token',
   VALIDATOR_CERT: 'validator-cert',
+  PRESENTED: 'presented-spend',
+  RECEIPT: 'validator-receipt',
 };
+
+/** Los dos modos de cobro. Ver bytesDelCobroDirecto para lo que implica cada uno. */
+const MODO = { RETO: 'RETO', DIRECTO: 'PRESENTADO' };
 
 /**
  * Escritor de campos con prefijo de longitud. Es el mismo formato que usa
@@ -990,7 +1001,43 @@ const bytesDelGasto = (t) => new Escritor(TAG.SPEND)
   .str(t.challengeNonce).long(t.spentAtEpochSec).str(t.deviceKeyFingerprint)
   .build();
 
-const hashDelEslabon = (gasto) => sha256(bytesDelGasto(gasto.token), gasto.signature);
+/**
+ * Bytes que firma el telefono, segun el modo de cobro.
+ *
+ * Cada modo tiene su propia etiqueta de dominio, asi que una firma de un modo
+ * jamas puede reinterpretarse como valida en el otro.
+ */
+const bytesFirmados = (gasto) =>
+  gasto.modo === MODO.DIRECTO ? bytesDelCobroDirecto(gasto.token) : bytesDelGasto(gasto.token);
+
+/**
+ * Cobro directo: el pasajero enseña su QR sin haber visto al cobrador, para que
+ * el lector de la unidad lo escanee de un tiron. Un escaneo en vez de dos.
+ *
+ * EL COSTO: en el modo de dos escaneos el pago va amarrado a un numero que el
+ * validador acaba de inventar, asi que una captura de pantalla no sirve jamas.
+ * Aqui ese amarre no existe, porque el telefono todavia no sabe a que unidad le
+ * paga. En su lugar el pago vale solo dentro de una ventana de tiempo corta.
+ * Dentro de esa ventana, el mismo QR mostrado en dos unidades cuela las dos
+ * veces; se detecta al reconciliar, pero ocurre.
+ *
+ * Tampoco lleva unidad ni dueño: quien cobra lo declara firmando el recibo.
+ */
+const bytesDelCobroDirecto = (t) => new Escritor(TAG.PRESENTED)
+  .str(t.grantId).str(t.walletId).long(t.seq)
+  .long(t.amountCentimos).long(t.balanceAfterCentimos)
+  .bytes(t.prevHash)
+  .long(t.validFromEpochSec).int(t.windowSeconds).str(t.nonce)
+  .str(t.deviceKeyFingerprint)
+  .build();
+
+/** Lo que el validador declara y firma al aceptar un pago. */
+const bytesDelRecibo = (c) => new Escritor(TAG.RECEIPT)
+  .str(c.linkId).str(c.validatorId).str(c.unitId).str(c.ownerId).str(c.routeId)
+  .long(c.amountCentimos).long(c.acceptedAtEpochSec).str(c.mode)
+  .build();
+
+const hashDelEslabon = (gasto) => sha256(bytesFirmados(gasto), gasto.signature);
 const idDelEslabon = async (gasto) => b64urlEncode(await hashDelEslabon(gasto));
 
 /**
@@ -1011,7 +1058,7 @@ async function codigoDeViaje(gasto) {
 // --- Codificacion de los QR -------------------------------------------------------
 
 const PREFIJO = 'PP1';
-const TIPO = { RETO: 'CHL', GASTO: 'SPD', VALE: 'GRT' };
+const TIPO = { RETO: 'CHL', GASTO: 'SPD', VALE: 'GRT', DIRECTO: 'PRS' };
 
 const envolver = (tipo, trama) => `${PREFIJO}:${tipo}:${b64urlEncode(trama)}`;
 
@@ -1090,6 +1137,54 @@ function codificarGasto(firmado) {
   return envolver(TIPO.GASTO, trama);
 }
 
+function codificarCobroDirecto(firmado) {
+  const t = firmado.token;
+  const g = firmado.grant.grant;
+  const trama = new Escritor()
+    .str(g.grantId).str(g.walletId).str(g.deviceKeyFingerprint)
+    .long(g.amountCentimos).str(g.currency)
+    .long(g.issuedAtEpochSec).long(g.expiresAtEpochSec)
+    .long(g.offlineSpendCapCentimos).int(g.offlineTripCap)
+    .str(g.issuerKeyId).str(g.nonce).bytes(firmado.grant.signature)
+    .long(t.seq).long(t.amountCentimos).long(t.balanceAfterCentimos)
+    .bytes(t.prevHash)
+    .long(t.validFromEpochSec).int(t.windowSeconds).str(t.nonce)
+    .bytes(firmado.signature).bytes(firmado.devicePublicKey)
+    .build();
+  return envolver(TIPO.DIRECTO, trama);
+}
+
+function decodificarCobroDirecto(texto) {
+  const r = new Lector(desenvolver(texto, TIPO.DIRECTO));
+  const grant = {
+    grantId: r.str(), walletId: r.str(), deviceKeyFingerprint: r.str(),
+    amountCentimos: r.long(), currency: r.str(),
+    issuedAtEpochSec: r.long(), expiresAtEpochSec: r.long(),
+    offlineSpendCapCentimos: r.long(), offlineTripCap: r.int(),
+    issuerKeyId: r.str(), nonce: r.str(),
+  };
+  const grantSignature = r.bytes();
+  const token = {
+    grantId: grant.grantId,
+    walletId: grant.walletId,
+    seq: r.long(),
+    amountCentimos: r.long(),
+    balanceAfterCentimos: r.long(),
+    prevHash: r.bytes(),
+    validFromEpochSec: r.long(),
+    windowSeconds: r.int(),
+    nonce: r.str(),
+    deviceKeyFingerprint: grant.deviceKeyFingerprint,
+  };
+  const signature = r.bytes();
+  const devicePublicKey = r.bytes();
+  r.end();
+  return {
+    modo: MODO.DIRECTO, token, signature,
+    grant: { grant, signature: grantSignature }, devicePublicKey,
+  };
+}
+
 function decodificarGasto(texto) {
   const r = new Lector(desenvolver(texto, TIPO.GASTO));
   const grant = {
@@ -1115,7 +1210,10 @@ function decodificarGasto(texto) {
   const signature = r.bytes();
   const devicePublicKey = r.bytes();
   r.end();
-  return { token, signature, grant: { grant, signature: grantSignature }, devicePublicKey };
+  return {
+    modo: MODO.RETO, token, signature,
+    grant: { grant, signature: grantSignature }, devicePublicKey,
+  };
 }
 
 // ===== web/motor.js =====
@@ -1130,9 +1228,22 @@ const ahora = () => Math.floor(Date.now() / 1000);
 const POLITICA_POR_DEFECTO = {
   vigenciaDelValeSegundos: 30 * 24 * 3600,
   vigenciaDelCertificadoSegundos: 365 * 24 * 3600,
-  topeOfflineCentimos: 200_00,
+  /**
+   * Tope de gasto sin sincronizar: la PERDIDA MAXIMA que puede causar un
+   * telefono comprometido antes de que el sistema lo bloquee. Por defecto, unos
+   * diez pasajes de 235 Bs.
+   *
+   * Ojo al ajustarlo: si queda por debajo de un pasaje, nadie puede pagar sin
+   * señal y el sistema no sirve para lo que se hizo.
+   */
+  topeOfflineCentimos: 2350_00,
   topeDeViajesOffline: 30,
   comisionPuntosBasicos: 300,
+  /**
+   * Cuanto se espera, tras vencer la ventana de un cobro directo, antes de
+   * devolverle el dinero al pasajero si ningun validador lo reclamo.
+   */
+  graciaParaDevolverSegundos: 24 * 3600,
 };
 
 class Servidor {
@@ -1144,6 +1255,11 @@ class Servidor {
     this.libro = new Map();       // "grantId#seq" -> gasto firmado
     this.doblesGastos = [];
     this.recibosSinLiquidar = new Map();
+    this.clavesDeValidadores = new Map();
+    this.reclamosPorEslabon = new Map();
+    this.reclamosDuplicados = [];
+    this.recibosRechazados = [];
+    this.devueltos = new Set();
     this.contador = 0;
   }
 
@@ -1179,6 +1295,7 @@ class Servidor {
       expiresAtEpochSec: t + this.politica.vigenciaDelCertificadoSegundos,
       issuerKeyId: this.emisorKeyId,
     };
+    this.clavesDeValidadores.set(validatorId, validatorPublicKey);
     return { cert, signature: await firmar(this.emisor.privateKey, bytesDelCertificado(cert)) };
   }
 
@@ -1234,10 +1351,36 @@ class Servidor {
     }
   }
 
+  /**
+   * El validador sube sus recibos. Van firmados por el, asi que el servidor no
+   * tiene que fiarse del canal: sin eso, en el modo de cobro directo cualquiera
+   * podria reclamar el pago de otro, porque el pago del pasajero no dice a que
+   * unidad va.
+   */
   async subirRecibos(validatorId, recibos) {
     const ids = [];
     for (const recibo of recibos) {
+      const c = recibo.recibo.claim;
+      const clave = this.clavesDeValidadores.get(c.validatorId);
+      if (!clave || !(await verificar(clave, bytesDelRecibo(c), recibo.recibo.signature))) {
+        this.recibosRechazados.push([recibo.receiptId, 'recibo no firmado por un validador registrado']);
+        continue;
+      }
+      const previo = this.reclamosPorEslabon.get(c.linkId);
+      if (previo && previo.recibo.claim.validatorId !== c.validatorId) {
+        // Un mismo pago reclamado por DOS unidades: en el modo directo puede
+        // pasar si el pasajero enseño el mismo QR en dos sitios dentro de la
+        // ventana. Se paga al primero y queda constancia.
+        this.reclamosDuplicados.push({
+          linkId: c.linkId,
+          walletId: recibo.spend.token.walletId,
+          primero: previo.recibo.claim,
+          segundo: c,
+        });
+        continue;
+      }
       await this.registrarGasto(recibo.spend);
+      if (!this.reclamosPorEslabon.has(c.linkId)) this.reclamosPorEslabon.set(c.linkId, recibo);
       this.recibosSinLiquidar.set(recibo.receiptId, recibo);
       ids.push(recibo.receiptId);
     }
@@ -1251,7 +1394,47 @@ class Servidor {
       await this.registrarGasto(gasto);
       confirmados.push(await idDelEslabon(gasto));
     }
-    return { confirmados, tiempoServidorEpochSec: this.reloj() };
+    const grantId = gastos[0]?.token?.grantId;
+    return {
+      confirmados,
+      tiempoServidorEpochSec: this.reloj(),
+      gastadoRealCentimos: grantId ? await this.gastadoReal(grantId) : null,
+    };
+  }
+
+  /**
+   * Lo que de verdad se ha gastado de un vale: todo lo registrado menos lo
+   * devuelto. Es la cifra que manda sobre el saldo que muestra el telefono.
+   */
+  async gastadoReal(grantId) {
+    let total = 0;
+    for (const gasto of this.libro.values()) {
+      if (gasto.token.grantId !== grantId) continue;
+      if (this.devueltos.has(await idDelEslabon(gasto))) continue;
+      total += gasto.token.amountCentimos;
+    }
+    return total;
+  }
+
+  /**
+   * Devuelve el dinero de los cobros directos que ningun validador reclamo.
+   *
+   * En el modo directo el telefono descuenta al generar el QR, sin poder saber
+   * si alguien llego a leerlo. Si el escaneo fallo, ese dinero tiene que volver.
+   */
+  async devolverNoReclamados() {
+    const t = this.reloj();
+    const devueltos = [];
+    for (const gasto of this.libro.values()) {
+      if (gasto.modo !== MODO.DIRECTO) continue;
+      const id = await idDelEslabon(gasto);
+      if (this.devueltos.has(id) || this.reclamosPorEslabon.has(id)) continue;
+      const vence = gasto.token.validFromEpochSec + gasto.token.windowSeconds;
+      if (t < vence + this.politica.graciaParaDevolverSegundos) continue;
+      this.devueltos.add(id);
+      devueltos.push(gasto);
+    }
+    return devueltos;
   }
 
   /** Cierra las cuentas: bloquea a los defraudadores y calcula la perdida. */
@@ -1278,6 +1461,7 @@ class Servidor {
       doblesGastos: this.doblesGastos,
       monederosBloqueados: bloqueados,
       descubiertoCentimos: descubierto,
+      reclamosDuplicados: this.reclamosDuplicados,
     };
   }
 
@@ -1447,7 +1631,10 @@ class Monedero {
         deviceKeyFingerprint: this.huella,
       };
       const signature = await firmar(this.claves.privateKey, bytesDelGasto(token));
-      const gasto = { token, signature, grant: vale.signedGrant, devicePublicKey: this.claves.publicKeyEncoded };
+      const gasto = {
+        modo: MODO.RETO, token, signature,
+        grant: vale.signedGrant, devicePublicKey: this.claves.publicKeyEncoded,
+      };
 
       vale.siguienteSeq += 1;
       vale.ultimoHash = await hashDelEslabon(gasto);
@@ -1467,6 +1654,72 @@ class Monedero {
     ];
     const motivo = prioridad.find((m) => motivos.includes(m)) || MOTIVO.SIN_SALDO;
     return { ok: false, motivo };
+  }
+
+  /**
+   * Modo de COBRO DIRECTO: genera el QR que el pasajero enseña para que lo lea
+   * el lector de la unidad, sin haber visto nada del cobrador.
+   *
+   * Ojo con lo que implica: el saldo se descuenta AQUI, al generar el QR, sin
+   * saber todavia si alguien va a leerlo. Si el escaneo no ocurre, el servidor
+   * devuelve el dinero al reconciliar, porque no habra ningun recibo firmado que
+   * reclame ese pago. Por eso el QR vale solo unos segundos.
+   */
+  async presentar(fareCentimos, ventanaSegundos = 90) {
+    if (this.vales.length === 0) return { ok: false, motivo: MOTIVO.SIN_SALDO };
+
+    const candidatos = [...this.vales].sort(
+      (a, b) => a.signedGrant.grant.expiresAtEpochSec - b.signedGrant.grant.expiresAtEpochSec,
+    );
+    const motivos = [];
+
+    for (const vale of candidatos) {
+      const g = vale.signedGrant.grant;
+      const t = Math.max(this.reloj(), vale.pisoDeTiempo);
+
+      if (t >= g.expiresAtEpochSec) { motivos.push(MOTIVO.VALE_CADUCADO); continue; }
+      if (fareCentimos > vale.saldoCentimos) { motivos.push(MOTIVO.SALDO_INSUFICIENTE); continue; }
+      if (fareCentimos > g.offlineSpendCapCentimos - vale.offlineGastadoCentimos) {
+        motivos.push(MOTIVO.TOPE_OFFLINE);
+        continue;
+      }
+      if (vale.offlineViajes >= g.offlineTripCap) { motivos.push(MOTIVO.TOPE_VIAJES); continue; }
+
+      const token = {
+        grantId: g.grantId,
+        walletId: g.walletId,
+        seq: vale.siguienteSeq,
+        amountCentimos: fareCentimos,
+        balanceAfterCentimos: vale.saldoCentimos - fareCentimos,
+        prevHash: vale.ultimoHash,
+        validFromEpochSec: t,
+        windowSeconds: ventanaSegundos,
+        nonce: nonce(),
+        deviceKeyFingerprint: this.huella,
+      };
+      const signature = await firmar(this.claves.privateKey, bytesDelCobroDirecto(token));
+      const gasto = {
+        modo: MODO.DIRECTO, token, signature,
+        grant: vale.signedGrant, devicePublicKey: this.claves.publicKeyEncoded,
+      };
+
+      vale.siguienteSeq += 1;
+      vale.ultimoHash = await hashDelEslabon(gasto);
+      vale.saldoCentimos -= fareCentimos;
+      vale.offlineGastadoCentimos += fareCentimos;
+      vale.offlineViajes += 1;
+      vale.pendientes.push(gasto);
+      vale.pisoDeTiempo = t;
+
+      return {
+        ok: true, gasto,
+        qr: codificarCobroDirecto(gasto),
+        venceEn: t + ventanaSegundos,
+      };
+    }
+
+    const prioridad = [MOTIVO.VALE_CADUCADO, MOTIVO.TOPE_VIAJES, MOTIVO.TOPE_OFFLINE, MOTIVO.SALDO_INSUFICIENTE];
+    return { ok: false, motivo: prioridad.find((m) => motivos.includes(m)) || MOTIVO.SIN_SALDO };
   }
 
   aplicarSincronizacion(ack) {
@@ -1489,6 +1742,11 @@ class Monedero {
       vale.offlineViajes = quedan.length;
       vale.pisoDeTiempo = Math.max(vale.pisoDeTiempo, ack.tiempoServidorEpochSec);
       if (quedan.length === 0) vale.noncesUsados = new Set();
+      // El servidor manda sobre el saldo: aqui entran tanto las correcciones por
+      // fraude como las devoluciones de cobros directos que nadie reclamo.
+      if (ack.gastadoRealCentimos !== null && ack.gastadoRealCentimos !== undefined) {
+        vale.saldoCentimos = vale.signedGrant.grant.amountCentimos - ack.gastadoRealCentimos;
+      }
     }
   }
 }
@@ -1510,6 +1768,8 @@ const RECHAZO = {
   MONTO: 'El monto no es el del pasaje',
   ARITMETICA: 'Cuentas del pago invalidas',
   FECHA: 'Hora del pago fuera de rango',
+  PAGO_VENCIDO: 'El QR del pasajero venció, que genere otro',
+  MODO_NO_ACEPTADO: 'Esta unidad cobra mostrando su propio QR primero',
 };
 
 class Validador {
@@ -1523,13 +1783,20 @@ class Validador {
     this.eslabonesVistos = new Map();
     this.recibos = new Map();
     this.listaNegra = new Set();
+    this.eslabonesVistos = this.eslabonesVistos || new Map();
   }
 
-  static async crear(servidor, { validatorId, unitId, ownerId, routeId, fareCentimos, ttlSeconds = 45 }, reloj = ahora) {
+  static async crear(servidor, { validatorId, unitId, ownerId, routeId, fareCentimos, ttlSeconds = 45, aceptaDirecto = true }, reloj = ahora) {
     const claves = await generarClaves();
     const cert = await servidor.registrarValidador(validatorId, unitId, ownerId, claves.publicKeyEncoded);
     return new Validador(
-      { validatorId, unitId, ownerId, routeId, fareCentimos, ttlSeconds, desfaseMaximoSegundos: 120 },
+      {
+        validatorId, unitId, ownerId, routeId, fareCentimos, ttlSeconds,
+        desfaseMaximoSegundos: 120,
+        // Si esta unidad acepta el modo de un solo escaneo. Mas rapido en la
+        // puerta, mas debil contra la repeticion: decision del operador.
+        aceptaDirecto,
+      },
       claves, cert, servidor.anclas, reloj,
     );
   }
@@ -1567,44 +1834,49 @@ class Validador {
     return { firmado, qr: codificarReto(firmado) };
   }
 
-  /** Verifica y cobra un pago. Todo sin internet. */
+  /**
+   * Verifica y cobra un pago, en cualquiera de los dos modos. Todo sin internet.
+   *
+   *  - **Modo reto** (dos escaneos): el pago responde a un cobro que este
+   *    aparato acaba de abrir. Es el mas seguro: un pantallazo no sirve nunca.
+   *  - **Modo directo** (un escaneo): el pasajero enseña y esta unidad lee. Es
+   *    mas rapido, a cambio de que el pago solo esta amarrado a una ventana de
+   *    tiempo corta en vez de a un reto concreto.
+   */
   async aceptar(gasto) {
     const t = this.reloj();
     const g = gasto.grant.grant;
     const tk = gasto.token;
 
-    const ancla = this.anclas.get(g.issuerKeyId);
-    if (!ancla) return { estado: 'rechazado', motivo: RECHAZO.EMISOR_DESCONOCIDO };
-    if (!(await verificar(ancla, bytesDelVale(g), gasto.grant.signature))) {
-      return { estado: 'rechazado', motivo: RECHAZO.SALDO_FALSO };
-    }
-    if (t >= g.expiresAtEpochSec) return { estado: 'rechazado', motivo: RECHAZO.VALE_CADUCADO };
+    const comun = await this.comprobacionesComunes(gasto, t);
+    if (comun) return comun;
 
-    const huella = await huellaDeClave(gasto.devicePublicKey);
-    if (huella !== g.deviceKeyFingerprint || huella !== tk.deviceKeyFingerprint) {
-      return { estado: 'rechazado', motivo: RECHAZO.CLAVE_AJENA };
+    if (gasto.modo === MODO.DIRECTO) {
+      if (!this.config.aceptaDirecto) {
+        return { estado: 'rechazado', motivo: RECHAZO.MODO_NO_ACEPTADO };
+      }
+      const repetido = await this.repeticion(gasto);
+      if (repetido) return repetido;
+      if (tk.amountCentimos !== this.config.fareCentimos) {
+        return { estado: 'rechazado', motivo: RECHAZO.MONTO };
+      }
+      const vence = tk.validFromEpochSec + tk.windowSeconds;
+      if (t > vence + this.config.desfaseMaximoSegundos) {
+        return { estado: 'rechazado', motivo: RECHAZO.PAGO_VENCIDO };
+      }
+      if (t < tk.validFromEpochSec - this.config.desfaseMaximoSegundos) {
+        return { estado: 'rechazado', motivo: RECHAZO.FECHA };
+      }
+      return this.cobrar(gasto, t);
     }
-    if (!(await verificar(gasto.devicePublicKey, bytesDelGasto(tk), gasto.signature))) {
-      return { estado: 'rechazado', motivo: RECHAZO.FIRMA_INVALIDA };
-    }
-    if (this.listaNegra.has(tk.walletId)) {
-      return { estado: 'rechazado', motivo: RECHAZO.BLOQUEADO };
-    }
+
     if (tk.validatorId !== this.config.validatorId || tk.unitId !== this.config.unitId ||
       tk.ownerId !== this.config.ownerId || tk.routeId !== this.config.routeId) {
       return { estado: 'rechazado', motivo: RECHAZO.OTRA_UNIDAD };
     }
 
-    // La repeticion se mira ANTES que el reto: al aceptar un pago se consume su
-    // reto, y un segundo escaneo del mismo QR ya no lo encontraria.
-    const clave = `${tk.grantId}#${tk.seq}`;
-    const id = await idDelEslabon(gasto);
-    const previo = this.eslabonesVistos.get(clave);
-    if (previo) {
-      return previo === id
-        ? { estado: 'ya_cobrado', recibo: this.recibos.get(id) || null }
-        : { estado: 'rechazado', motivo: RECHAZO.DOBLE_GASTO };
-    }
+    const repetido = await this.repeticion(gasto);
+    if (repetido) return repetido;
 
     const reto = this.retosAbiertos.get(tk.challengeNonce);
     if (!reto) return { estado: 'rechazado', motivo: RECHAZO.RETO_DESCONOCIDO };
@@ -1619,23 +1891,87 @@ class Validador {
       tk.spentAtEpochSec < reto.issuedAtEpochSec - this.config.desfaseMaximoSegundos) {
       return { estado: 'rechazado', motivo: RECHAZO.FECHA };
     }
+
+    this.retosAbiertos.delete(tk.challengeNonce);
+    return this.cobrar(gasto, t);
+  }
+
+  /** Lo que se comprueba igual en los dos modos. Devuelve null si todo va bien. */
+  async comprobacionesComunes(gasto, t) {
+    const g = gasto.grant.grant;
+    const tk = gasto.token;
+
+    const ancla = this.anclas.get(g.issuerKeyId);
+    if (!ancla) return { estado: 'rechazado', motivo: RECHAZO.EMISOR_DESCONOCIDO };
+    if (!(await verificar(ancla, bytesDelVale(g), gasto.grant.signature))) {
+      return { estado: 'rechazado', motivo: RECHAZO.SALDO_FALSO };
+    }
+    if (t >= g.expiresAtEpochSec) return { estado: 'rechazado', motivo: RECHAZO.VALE_CADUCADO };
+
+    const huella = await huellaDeClave(gasto.devicePublicKey);
+    if (huella !== g.deviceKeyFingerprint || huella !== tk.deviceKeyFingerprint) {
+      return { estado: 'rechazado', motivo: RECHAZO.CLAVE_AJENA };
+    }
+    if (!(await verificar(gasto.devicePublicKey, bytesFirmados(gasto), gasto.signature))) {
+      return { estado: 'rechazado', motivo: RECHAZO.FIRMA_INVALIDA };
+    }
+    if (this.listaNegra.has(tk.walletId)) {
+      return { estado: 'rechazado', motivo: RECHAZO.BLOQUEADO };
+    }
     if (tk.seq < 1 || tk.amountCentimos <= 0 || tk.balanceAfterCentimos < 0 ||
       tk.balanceAfterCentimos + tk.amountCentimos > g.amountCentimos) {
       return { estado: 'rechazado', motivo: RECHAZO.ARITMETICA };
     }
+    return null;
+  }
 
-    this.retosAbiertos.delete(tk.challengeNonce);
-    this.eslabonesVistos.set(clave, id);
+  /**
+   * Repeticion y bifurcacion vistas por este mismo aparato. Va ANTES de mirar el
+   * reto: al aceptar un pago se consume su reto, y un segundo escaneo del mismo
+   * QR ya no lo encontraria.
+   */
+  async repeticion(gasto) {
+    const clave = `${gasto.token.grantId}#${gasto.token.seq}`;
+    const id = await idDelEslabon(gasto);
+    const previo = this.eslabonesVistos.get(clave);
+    if (!previo) return null;
+    return previo === id
+      ? { estado: 'ya_cobrado', recibo: this.recibos.get(id) || null }
+      : { estado: 'rechazado', motivo: RECHAZO.DOBLE_GASTO };
+  }
+
+  /** Anota el cobro y FIRMA el recibo con el que se reclamara el dinero. */
+  async cobrar(gasto, t) {
+    const id = await idDelEslabon(gasto);
+    this.eslabonesVistos.set(`${gasto.token.grantId}#${gasto.token.seq}`, id);
+
+    const claim = {
+      linkId: id,
+      validatorId: this.config.validatorId,
+      unitId: this.config.unitId,
+      ownerId: this.config.ownerId,
+      routeId: this.config.routeId,
+      amountCentimos: gasto.token.amountCentimos,
+      acceptedAtEpochSec: t,
+      mode: gasto.modo,
+    };
     const recibo = {
-      receiptId: id, spend: gasto,
-      validatorId: this.config.validatorId, unitId: this.config.unitId,
-      ownerId: this.config.ownerId, acceptedAtEpochSec: t,
+      receiptId: id,
+      spend: gasto,
+      ownerId: this.config.ownerId,
+      recibo: {
+        claim,
+        signature: await firmar(this.claves.privateKey, bytesDelRecibo(claim)),
+        validatorPublicKey: this.claves.publicKeyEncoded,
+      },
     };
     this.recibos.set(id, recibo);
     return {
-      estado: 'aceptado', recibo,
-      montoCentimos: tk.amountCentimos,
-      saldoDelPasajeroCentimos: tk.balanceAfterCentimos,
+      estado: 'aceptado',
+      recibo,
+      modo: gasto.modo,
+      montoCentimos: gasto.token.amountCentimos,
+      saldoDelPasajeroCentimos: gasto.token.balanceAfterCentimos,
     };
   }
 
@@ -1657,7 +1993,7 @@ const cuerpo = document.body;
 
 let mundo = null;
 let retoActual = null;
-let pagoActual = null;
+let pagoActual = null; // { qr, gasto, modo }
 let pantallazoGuardado = null;
 let conectado = true;
 let evento = 0;
@@ -1753,6 +2089,7 @@ function refrescar() {
   $('btn-recargar').disabled = !conectado;
   $('btn-sincronizar').disabled = !conectado || !w || w.pendientes.length === 0;
   $('btn-pagar').disabled = !w || w.saldoCentimos === 0 || !retoActual;
+  $('btn-directo').disabled = !w || w.saldoCentimos === 0;
   $('btn-leer').disabled = !pagoActual;
   $('btn-subir').disabled = !conectado || !mundo?.bus || mundo.bus.recibosPendientes.length === 0;
 
@@ -1842,7 +2179,7 @@ $('btn-pagar').addEventListener('click', async () => {
     refrescar();
     return;
   }
-  pagoActual = pago;
+  pagoActual = { qr: pago.qr, gasto: pago.gasto, modo: MODO.RETO };
   pantallazoGuardado = pago.qr;
   dibujarEn($('pantalla-pasajero'), pago.qr, `Pagado ${Money.formato(pago.gasto.token.amountCentimos)} · muéstraselo al cobrador`);
   pintarCodigo($('pantalla-pasajero'), await codigoDeViaje(pago.gasto));
@@ -1850,14 +2187,33 @@ $('btn-pagar').addEventListener('click', async () => {
   refrescar();
 });
 
+$('btn-directo').addEventListener('click', async () => {
+  const directo = await mundo.maria.presentar(leerMonto('in-pasaje', 235_00));
+  if (!directo.ok) {
+    veredicto($('pantalla-pasajero'), 'mal', 'No se pudo generar', directo.motivo);
+    apuntar('pasajero', `El teléfono no genera el cobro directo: ${directo.motivo}`, null, 'mala');
+    refrescar();
+    return;
+  }
+  pagoActual = { qr: directo.qr, gasto: directo.gasto, modo: MODO.DIRECTO };
+  pantallazoGuardado = directo.qr;
+  dibujarEn($('pantalla-pasajero'), directo.qr, `Cobro directo de ${Money.formato(directo.gasto.token.amountCentimos)} · vale 90 s`);
+  pintarCodigo($('pantalla-pasajero'), await codigoDeViaje(directo.gasto));
+  apuntar('pasajero', 'Firma el pago sin haber visto al cobrador y descuenta el saldo. Si nadie lo escanea, el servidor se lo devuelve al reconciliar.', `movimiento #${directo.gasto.token.seq} · vence en 90 s`, 'destacada');
+  refrescar();
+});
+
 $('btn-leer').addEventListener('click', async () => {
-  const gasto = decodificarGasto(pagoActual.qr);
+  const gasto = pagoActual.modo === MODO.DIRECTO
+    ? decodificarCobroDirecto(pagoActual.qr)
+    : decodificarGasto(pagoActual.qr);
   const r = await mundo.bus.aceptar(gasto);
   if (r.estado === 'aceptado') {
     const codigo = await codigoDeViaje(gasto);
     veredicto($('pantalla-validador'), 'ok', `Pago aceptado · ${Money.formato(r.montoCentimos)}`, `Al pasajero le quedan ${Money.formato(r.saldoDelPasajeroCentimos)}. Puede pasar.`);
     pintarCodigo($('pantalla-validador'), codigo);
-    apuntar('validador', `Verifica la firma del emisor, la del teléfono y las cuentas. Todo sin internet. El código ${codigo} coincide con el del pasajero.`, `recibo ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
+    const comoLlego = r.modo === MODO.DIRECTO ? 'de un solo escaneo' : 'respondiendo a su reto';
+    apuntar('validador', `Cobra ${comoLlego}: verifica la firma del emisor, la del teléfono y las cuentas, todo sin internet. El código ${codigo} coincide con el del pasajero.`, `recibo firmado ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
   } else if (r.estado === 'ya_cobrado') {
     veredicto($('pantalla-validador'), 'aviso', 'Ese QR ya se cobró', 'No es un pago nuevo. No lo dejes pasar.');
     apuntar('validador', 'Reconoce el QR como ya cobrado. No suma dinero.', null, 'mala');
@@ -1933,7 +2289,10 @@ $('atq-pantallazo').addEventListener('click', async () => {
   }
   apuntar('ataque', 'El pasajero guardó el QR de un pago anterior y lo muestra en el siguiente viaje.');
   await mundo.bus.nuevoReto();
-  const r = await mundo.bus.aceptar(decodificarGasto(pantallazoGuardado));
+  const guardado = tipoDeQr(pantallazoGuardado) === TIPO.DIRECTO
+    ? decodificarCobroDirecto(pantallazoGuardado)
+    : decodificarGasto(pantallazoGuardado);
+  const r = await mundo.bus.aceptar(guardado);
   const texto = r.estado === 'ya_cobrado' ? 'Ese QR ya se cobró' : r.motivo;
   veredicto($('pantalla-validador'), 'mal', 'No sirve', texto);
   apuntar('validador', `Rechazado: ${texto}`, 'Cada cobro lleva un número de un solo uso; un QR viejo no responde a ninguno vivo.', 'mala');
@@ -1976,6 +2335,40 @@ $('atq-doble').addEventListener('click', async () => {
     apuntar('servidor', `Al reconciliar aparece la bifurcación: dos gastos distintos en el movimiento #${p.seq} de la misma cadena.`, `${p.ramaA.token.unitId} y ${p.ramaB.token.unitId} · las dos ramas firmadas por ${p.walletId}`, 'destacada');
     apuntar('servidor', `Monedero ${p.walletId} bloqueado. La pérdida sale de su saldo retenido, no del bolsillo del chofer.`, 'A los dos dueños se les paga igual: prestaron el servicio.', 'destacada');
     veredicto($('pantalla-validador'), 'aviso', 'Fraude detectado al reconciliar', `Las dos firmas son del propio ${p.walletId}. Queda bloqueado y no puede recargar más.`);
+  }
+  refrescar();
+});
+
+$('atq-directo').addEventListener('click', async () => {
+  if (mundo.maria.saldoCentimos === 0) {
+    apuntar('ataque', 'Hace falta saldo cargado para probarlo.');
+    return;
+  }
+  apuntar('ataque', 'El pasajero genera un cobro directo y le pasa la captura a un amigo que va en otra unidad, dentro de los 90 segundos.');
+
+  const directo = await mundo.maria.presentar(leerMonto('in-pasaje', 235_00));
+  if (!directo.ok) {
+    apuntar('pasajero', `No se pudo generar: ${directo.motivo}`, null, 'mala');
+    refrescar();
+    return;
+  }
+  const otroBus = await Validador.crear(mundo.servidor, {
+    validatorId: 'v-bus07', unitId: 'bus-07', ownerId: 'doña-carmen',
+    routeId: 'ruta-01', fareCentimos: mundo.bus.config.fareCentimos,
+  });
+
+  const a = await mundo.bus.aceptar(decodificarCobroDirecto(directo.qr));
+  const b = await otroBus.aceptar(decodificarCobroDirecto(directo.qr));
+  apuntar('validador', `bus-14: ${a.estado}. bus-07 con el MISMO QR: ${b.estado}. Ninguno de los dos puede saberlo sin internet.`, null, 'mala');
+
+  await mundo.servidor.subirRecibos('v-bus14', mundo.bus.recibosPendientes);
+  await mundo.servidor.subirRecibos('v-bus07', otroBus.recibosPendientes);
+  const informe = mundo.servidor.reconciliar();
+
+  if (informe.reclamosDuplicados.length > 0) {
+    const d = informe.reclamosDuplicados[informe.reclamosDuplicados.length - 1];
+    apuntar('servidor', `Al reconciliar aparecen dos recibos firmados por el mismo pago: ${d.primero.unitId} y ${d.segundo.unitId}.`, 'Se le paga al primero que lo reclamó; el segundo no cobra, y queda constancia contra ese monedero.', 'destacada');
+    veredicto($('pantalla-validador'), 'aviso', 'Cobro duplicado detectado', `Este es el precio del modo directo. Con el de dos escaneos no ocurre: pruébalo y compara.`);
   }
   refrescar();
 });

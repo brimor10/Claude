@@ -9,7 +9,7 @@ bolívares.
 
 | Módulo | Qué es | Estado |
 |---|---|---|
-| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 36 pruebas** |
+| `:core` | Protocolo, criptografía, monedero, validador y servidor de liquidación. Kotlin puro, sin Android. | **Compila y pasa 47 pruebas** |
 | `web/` | Demostración operable en el navegador: el mismo protocolo en JavaScript. | **Probada en Chromium de punta a punta** |
 | `:app` | App Android (Compose): modo pasajero y modo cobrador. | **Escrito, sin compilar** — ver aviso abajo |
 
@@ -43,7 +43,7 @@ la clave privada a la vista.
 ## Cómo correr las pruebas
 
 ```bash
-./gradlew :core:test          # el protocolo: 36 pruebas
+./gradlew :core:test          # el protocolo: 47 pruebas
 python3 tools/verificar-qr.py # el generador de QR
 node tools/probar-demo.mjs    # la demostración web, en Chromium
 ```
@@ -61,9 +61,15 @@ cuando no encuentra `ANDROID_HOME`, `ANDROID_SDK_ROOT` ni `sdk.dir` en
 dinero en garantía y le entrega al teléfono un **vale de saldo** firmado, amarrado
 a la clave de ese teléfono en concreto.
 
-**2. Pagar (sin internet).** El aparato de la unidad muestra un QR de cobro con un
-número de un solo uso que vence en 45 segundos. El pasajero lo escanea, su
-teléfono firma un **vale de gasto** y le muestra el QR resultante al cobrador.
+**2. Pagar (sin internet).** Dos formas:
+
+- **Escaneando** (dos lecturas): la unidad muestra un QR de cobro con un número
+  de un solo uso; el pasajero lo escanea y responde con el suyo. Un pantallazo
+  no sirve jamás.
+- **Cobro directo** (una lectura): el pasajero enseña su QR y el lector de la
+  unidad lo lee. Más rápido en la puerta, a cambio de que el pago solo vale 90
+  segundos y dentro de esa ventana puede colar en dos unidades. El costo está
+  medido y probado; ver `docs/SEGURIDAD.md`.
 
 **3. Verificar (sin internet).** El cobrador escanea y verifica ahí mismo: que el
 saldo lo firmó el servidor, que el vale es de ese teléfono, que el pago responde

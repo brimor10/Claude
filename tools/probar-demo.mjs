@@ -109,6 +109,22 @@ await pulsar('#btn-leer');
 await pulsar('#atq-pantallazo');
 comprobar((await texto('#pantalla-validador')).includes('No sirve'), 'el pantallazo viejo no cuela');
 
+// --- modo de cobro directo (un solo escaneo) -------------------------------------
+await pulsar('#btn-directo');
+comprobar(await pagina.$('#pantalla-pasajero canvas') !== null, 'el cobro directo dibuja un QR sin pedir nada al cobrador');
+const codigoDirecto = await pagina.textContent('#pantalla-pasajero .codigo b');
+await pulsar('#btn-leer');
+comprobar((await texto('#pantalla-validador')).includes('Pago aceptado'), 'la unidad cobra de un solo escaneo');
+comprobar(await pagina.textContent('#pantalla-validador .codigo b') === codigoDirecto,
+  'el código de viaje también cuadra en el modo directo');
+comprobar((await bitacora()).includes('de un solo escaneo'), 'la bitácora distingue el modo de cobro');
+
+await pulsar('#atq-directo');
+const trasDirecto = await bitacora();
+comprobar(trasDirecto.includes('dos recibos firmados por el mismo pago'),
+  'el cobro duplicado del modo directo se detecta al reconciliar');
+comprobar(trasDirecto.includes('no cobra'), 'la segunda unidad no cobra el pago duplicado');
+
 await pulsar('#atq-doble');
 const finalBitacora = await bitacora();
 comprobar(finalBitacora.includes('bifurcación') || finalBitacora.includes('bifurcacion'),

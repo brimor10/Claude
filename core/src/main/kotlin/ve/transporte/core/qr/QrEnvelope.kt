@@ -4,9 +4,11 @@ import ve.transporte.core.crypto.Base64Url
 import ve.transporte.core.protocol.FrameFormatException
 import ve.transporte.core.protocol.FrameReader
 import ve.transporte.core.protocol.FrameWriter
+import ve.transporte.core.protocol.PresentedSpendToken
 import ve.transporte.core.protocol.PurseGrant
 import ve.transporte.core.protocol.SignedChallenge
 import ve.transporte.core.protocol.SignedGrant
+import ve.transporte.core.protocol.SignedPresentedSpend
 import ve.transporte.core.protocol.SignedSpend
 import ve.transporte.core.protocol.SignedValidatorCert
 import ve.transporte.core.protocol.SpendToken
@@ -30,6 +32,9 @@ object QrEnvelope {
 
     /** Vale de saldo suelto: permite recargar en una taquilla que si tiene internet. */
     const val TYPE_GRANT = "GRT"
+
+    /** Cobro directo: el pasajero enseña y la unidad lee, de un solo escaneo. */
+    const val TYPE_PRESENTED = "PRS"
 
     // -- Reto del validador -------------------------------------------------
 
@@ -129,6 +134,60 @@ object QrEnvelope {
             throw QrFormatException("vale de gasto ilegible: ${e.message}", e)
         } catch (e: Exception) {
             throw QrFormatException("vale de gasto ilegible", e)
+        }
+    }
+
+    // -- Cobro directo (un solo escaneo) --------------------------------------
+
+    fun encode(signed: SignedPresentedSpend): String {
+        val t = signed.token
+        val g = signed.grant.grant
+        val frame = FrameWriter()
+            .str(g.grantId).str(g.walletId).str(g.deviceKeyFingerprint)
+            .long(g.amountCentimos).str(g.currency)
+            .long(g.issuedAtEpochSec).long(g.expiresAtEpochSec)
+            .long(g.offlineSpendCapCentimos).int(g.offlineTripCap)
+            .str(g.issuerKeyId).str(g.nonce)
+            .bytes(signed.grant.signature)
+            .long(t.seq).long(t.amountCentimos).long(t.balanceAfterCentimos)
+            .bytes(t.prevHash)
+            .long(t.validFromEpochSec).int(t.windowSeconds).str(t.nonce)
+            .bytes(signed.signature).bytes(signed.devicePublicKey)
+            .build()
+        return "$PREFIX:$TYPE_PRESENTED:${Base64Url.encode(frame)}"
+    }
+
+    fun decodePresented(text: String): SignedPresentedSpend {
+        val r = FrameReader(payloadOf(text, TYPE_PRESENTED))
+        return try {
+            val grant = PurseGrant(
+                grantId = r.str(), walletId = r.str(), deviceKeyFingerprint = r.str(),
+                amountCentimos = r.long(), currency = r.str(),
+                issuedAtEpochSec = r.long(), expiresAtEpochSec = r.long(),
+                offlineSpendCapCentimos = r.long(), offlineTripCap = r.int(),
+                issuerKeyId = r.str(), nonce = r.str(),
+            )
+            val grantSig = r.bytes()
+            val token = PresentedSpendToken(
+                grantId = grant.grantId,
+                walletId = grant.walletId,
+                seq = r.long(),
+                amountCentimos = r.long(),
+                balanceAfterCentimos = r.long(),
+                prevHash = r.bytes(),
+                validFromEpochSec = r.long(),
+                windowSeconds = r.int(),
+                nonce = r.str(),
+                deviceKeyFingerprint = grant.deviceKeyFingerprint,
+            )
+            val spendSig = r.bytes()
+            val devicePub = r.bytes()
+            r.end()
+            SignedPresentedSpend(token, spendSig, SignedGrant(grant, grantSig), devicePub)
+        } catch (e: FrameFormatException) {
+            throw QrFormatException("cobro directo ilegible: ${e.message}", e)
+        } catch (e: Exception) {
+            throw QrFormatException("cobro directo ilegible", e)
         }
     }
 

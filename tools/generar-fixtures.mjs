@@ -41,6 +41,16 @@ for (let i = 0; i < 2; i++) {
   pagos.push({ reto, pago });
 }
 
+// Un cobro directo (modo de un solo escaneo) con su recibo firmado, para
+// comprobar que el core en Kotlin tambien los entiende byte a byte.
+const directo = await monedero.presentar(2_35);
+if (!directo.ok) throw new Error(`el cobro directo fue rechazado: ${directo.motivo}`);
+const cobroDirecto = await bus.aceptar(directo.gasto);
+if (cobroDirecto.estado !== 'aceptado') {
+  throw new Error(`el validador rechazo el cobro directo: ${cobroDirecto.motivo}`);
+}
+const claim = cobroDirecto.recibo.recibo;
+
 const fixtures = {
   _comentario:
     'Generado por tools/generar-fixtures.mjs con la implementacion JavaScript. ' +
@@ -67,6 +77,29 @@ const fixtures = {
     codigoDeViajeDelPrimerPago: await codigoDeViaje(pagos[0].pago.gasto),
     codigoDeViajeDelSegundoPago: await codigoDeViaje(pagos[1].pago.gasto),
   },
+  cobroDirecto: {
+    qr: directo.qr,
+    seq: directo.gasto.token.seq,
+    montoCentimos: directo.gasto.token.amountCentimos,
+    saldoDespuesCentimos: directo.gasto.token.balanceAfterCentimos,
+    ventanaSegundos: directo.gasto.token.windowSeconds,
+    codigoDeViaje: await codigoDeViaje(directo.gasto),
+  },
+  // Recibo firmado por el validador. En el modo directo es lo unico que dice a
+  // que unidad y a que dueño va el dinero, porque el pago del pasajero no lo
+  // sabia cuando se firmo.
+  recibo: {
+    linkId: claim.claim.linkId,
+    validatorId: claim.claim.validatorId,
+    unitId: claim.claim.unitId,
+    ownerId: claim.claim.ownerId,
+    routeId: claim.claim.routeId,
+    amountCentimos: claim.claim.amountCentimos,
+    acceptedAtEpochSec: claim.claim.acceptedAtEpochSec,
+    mode: claim.claim.mode,
+    firma: b64urlEncode(claim.signature),
+    clavePublicaDelValidador: b64urlEncode(claim.validatorPublicKey),
+  },
 };
 
 writeFileSync(
@@ -77,3 +110,4 @@ console.log('escrito web/fixtures-compatibilidad.json');
 console.log(`  vale  ${fixtures.valeQr.length} caracteres`);
 console.log(`  reto  ${fixtures.retoQr.length} caracteres`);
 console.log(`  gasto ${fixtures.gastoQr.length} caracteres`);
+console.log(`  cobro directo ${fixtures.cobroDirecto.qr.length} caracteres`);

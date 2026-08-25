@@ -32,6 +32,10 @@ class WalletBook(
 
     val pendingSpends: List<SignedSpend> get() = purses.flatMap { it.pending }
 
+    /** Todo lo pendiente de subir, en los dos modos de cobro. */
+    val pendingAll: List<ve.transporte.core.protocol.AnySpend>
+        get() = purses.flatMap { it.pendingAll }
+
     fun addGrant(signedGrant: SignedGrant): LoadGrantOutcome {
         val existing = purses.find { it.signedGrant.grant.grantId == signedGrant.grant.grantId }
         if (existing != null) return LoadGrantOutcome.Loaded(existing)
@@ -68,12 +72,42 @@ class WalletBook(
         return bestDenial(denials)
     }
 
+    /**
+     * Modo de cobro directo: genera el QR que el pasajero enseña para que lo lea
+     * el lector de la unidad. Ver [OfflineWallet.present] para lo que implica.
+     */
+    fun present(fareCentimos: Long, windowSeconds: Int = 90): PresentOutcome {
+        if (purses.isEmpty()) {
+            return PresentOutcome.Denied(DenyReason.SIN_SALDO_CARGADO, "no hay saldo recargado")
+        }
+        val denials = mutableListOf<PresentOutcome.Denied>()
+        for (state in purses.sortedBy { it.signedGrant.grant.expiresAtEpochSec }) {
+            when (val outcome = engine.present(state, fareCentimos, windowSeconds)) {
+                is PresentOutcome.Approved -> {
+                    purses[purses.indexOf(state)] = outcome.newState
+                    return outcome
+                }
+
+                is PresentOutcome.Denied -> denials += outcome
+            }
+        }
+        val prioridad = listOf(
+            DenyReason.PASAJE_INVALIDO,
+            DenyReason.TOPE_DE_VIAJES_OFFLINE_ALCANZADO,
+            DenyReason.TOPE_OFFLINE_ALCANZADO,
+            DenyReason.SALDO_INSUFICIENTE,
+        )
+        return prioridad.firstNotNullOfOrNull { r -> denials.find { it.reason == r } }
+            ?: denials.firstOrNull()
+            ?: PresentOutcome.Denied(DenyReason.SIN_SALDO_CARGADO, "no hay vale utilizable")
+    }
+
     fun applySync(ack: SyncAck) {
         for (i in purses.indices) {
             purses[i] = engine.applySync(purses[i], ack)
         }
         // Un vale totalmente gastado y sincronizado ya no ocupa espacio.
-        purses.removeAll { it.balanceCentimos == 0L && it.pending.isEmpty() }
+        purses.removeAll { it.balanceCentimos == 0L && it.pendingAll.isEmpty() }
     }
 
     /**

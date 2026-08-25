@@ -27,6 +27,15 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(KEY_UNIT_ID, null)
         set(value) = prefs.edit().putString(KEY_UNIT_ID, value).apply()
 
+    /**
+     * Pasaje vigente de la ruta, en centimos. Hace falta para el modo de cobro
+     * directo, en el que el telefono firma el pago sin haber visto al cobrador y
+     * por tanto tiene que saber el monto de antemano. Se refresca al sincronizar.
+     */
+    var fareCentimos: Long
+        get() = prefs.getLong(KEY_FARE, 235_00)
+        set(value) = prefs.edit().putLong(KEY_FARE, value).apply()
+
     var ownerId: String?
         get() = prefs.getString(KEY_OWNER_ID, null)
         set(value) = prefs.edit().putString(KEY_OWNER_ID, value).apply()
@@ -36,5 +45,6 @@ class AppPrefs(context: Context) {
         const val KEY_VALIDATOR_ID = "validator_id"
         const val KEY_UNIT_ID = "unit_id"
         const val KEY_OWNER_ID = "owner_id"
+        const val KEY_FARE = "fare_centimos"
     }
 }

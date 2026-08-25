@@ -263,7 +263,9 @@
         </div>
         <div class="botones">
           <button class="principal" id="btn-pagar" type="button" disabled>Escanear el QR del cobrador y pagar</button>
+          <button id="btn-directo" type="button" disabled>Cobro directo: mostrar mi QR</button>
         </div>
+        <p class="nota-larga" style="font-size:14.5px">Dos modos. <strong>Escanear</strong> son dos lecturas y una captura de pantalla no sirve jamás. <strong>Cobro directo</strong> es una sola lectura —más rápido en la puerta— pero el QR vale 90 segundos y dentro de esa ventana puede colar en dos unidades. Pruébalo con el último botón de abajo.</p>
       </div>
     </section>
 
@@ -274,8 +276,8 @@
           <p class="vacio">Listo para cobrar. Genera un QR de cobro.</p>
         </div>
         <div class="botones">
-          <button class="principal" id="btn-cobrar" type="button">Cobrar pasaje</button>
-          <button id="btn-leer" type="button" disabled>Leer el pago</button>
+          <button class="principal" id="btn-cobrar" type="button">Cobrar pasaje (mostrar QR)</button>
+          <button id="btn-leer" type="button" disabled>Leer el QR del pasajero</button>
           <button id="btn-subir" type="button" disabled>Subir recibos</button>
         </div>
       </div>
@@ -300,6 +302,10 @@
       <button class="ataque" id="atq-cobrador" type="button">
         <b>Cobrador falso</b>
         <em>Pegar en la pared un QR de cobro hecho por cualquiera, para cobrar pasajes sin prestar el servicio.</em>
+      </button>
+      <button class="ataque" id="atq-directo" type="button">
+        <b>El mismo QR en dos unidades</b>
+        <em>La debilidad del cobro directo: pasarle la captura a un amigo dentro de los 90 segundos. Cuela dos veces.</em>
       </button>
     </div>
   </section>
@@ -348,7 +354,7 @@ const cuerpo = document.body;
 
 let mundo = null;
 let retoActual = null;
-let pagoActual = null;
+let pagoActual = null; // { qr, gasto, modo }
 let pantallazoGuardado = null;
 let conectado = true;
 let evento = 0;
@@ -444,6 +450,7 @@ function refrescar() {
   $('btn-recargar').disabled = !conectado;
   $('btn-sincronizar').disabled = !conectado || !w || w.pendientes.length === 0;
   $('btn-pagar').disabled = !w || w.saldoCentimos === 0 || !retoActual;
+  $('btn-directo').disabled = !w || w.saldoCentimos === 0;
   $('btn-leer').disabled = !pagoActual;
   $('btn-subir').disabled = !conectado || !mundo?.bus || mundo.bus.recibosPendientes.length === 0;
 
@@ -533,7 +540,7 @@ $('btn-pagar').addEventListener('click', async () => {
     refrescar();
     return;
   }
-  pagoActual = pago;
+  pagoActual = { qr: pago.qr, gasto: pago.gasto, modo: MODO.RETO };
   pantallazoGuardado = pago.qr;
   dibujarEn($('pantalla-pasajero'), pago.qr, `Pagado ${Money.formato(pago.gasto.token.amountCentimos)} · muéstraselo al cobrador`);
   pintarCodigo($('pantalla-pasajero'), await codigoDeViaje(pago.gasto));
@@ -541,14 +548,33 @@ $('btn-pagar').addEventListener('click', async () => {
   refrescar();
 });
 
+$('btn-directo').addEventListener('click', async () => {
+  const directo = await mundo.maria.presentar(leerMonto('in-pasaje', 235_00));
+  if (!directo.ok) {
+    veredicto($('pantalla-pasajero'), 'mal', 'No se pudo generar', directo.motivo);
+    apuntar('pasajero', `El teléfono no genera el cobro directo: ${directo.motivo}`, null, 'mala');
+    refrescar();
+    return;
+  }
+  pagoActual = { qr: directo.qr, gasto: directo.gasto, modo: MODO.DIRECTO };
+  pantallazoGuardado = directo.qr;
+  dibujarEn($('pantalla-pasajero'), directo.qr, `Cobro directo de ${Money.formato(directo.gasto.token.amountCentimos)} · vale 90 s`);
+  pintarCodigo($('pantalla-pasajero'), await codigoDeViaje(directo.gasto));
+  apuntar('pasajero', 'Firma el pago sin haber visto al cobrador y descuenta el saldo. Si nadie lo escanea, el servidor se lo devuelve al reconciliar.', `movimiento #${directo.gasto.token.seq} · vence en 90 s`, 'destacada');
+  refrescar();
+});
+
 $('btn-leer').addEventListener('click', async () => {
-  const gasto = decodificarGasto(pagoActual.qr);
+  const gasto = pagoActual.modo === MODO.DIRECTO
+    ? decodificarCobroDirecto(pagoActual.qr)
+    : decodificarGasto(pagoActual.qr);
   const r = await mundo.bus.aceptar(gasto);
   if (r.estado === 'aceptado') {
     const codigo = await codigoDeViaje(gasto);
     veredicto($('pantalla-validador'), 'ok', `Pago aceptado · ${Money.formato(r.montoCentimos)}`, `Al pasajero le quedan ${Money.formato(r.saldoDelPasajeroCentimos)}. Puede pasar.`);
     pintarCodigo($('pantalla-validador'), codigo);
-    apuntar('validador', `Verifica la firma del emisor, la del teléfono y las cuentas. Todo sin internet. El código ${codigo} coincide con el del pasajero.`, `recibo ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
+    const comoLlego = r.modo === MODO.DIRECTO ? 'de un solo escaneo' : 'respondiendo a su reto';
+    apuntar('validador', `Cobra ${comoLlego}: verifica la firma del emisor, la del teléfono y las cuentas, todo sin internet. El código ${codigo} coincide con el del pasajero.`, `recibo firmado ${r.recibo.receiptId.slice(0, 22)}…`, 'destacada');
   } else if (r.estado === 'ya_cobrado') {
     veredicto($('pantalla-validador'), 'aviso', 'Ese QR ya se cobró', 'No es un pago nuevo. No lo dejes pasar.');
     apuntar('validador', 'Reconoce el QR como ya cobrado. No suma dinero.', null, 'mala');
@@ -624,7 +650,10 @@ $('atq-pantallazo').addEventListener('click', async () => {
   }
   apuntar('ataque', 'El pasajero guardó el QR de un pago anterior y lo muestra en el siguiente viaje.');
   await mundo.bus.nuevoReto();
-  const r = await mundo.bus.aceptar(decodificarGasto(pantallazoGuardado));
+  const guardado = tipoDeQr(pantallazoGuardado) === TIPO.DIRECTO
+    ? decodificarCobroDirecto(pantallazoGuardado)
+    : decodificarGasto(pantallazoGuardado);
+  const r = await mundo.bus.aceptar(guardado);
   const texto = r.estado === 'ya_cobrado' ? 'Ese QR ya se cobró' : r.motivo;
   veredicto($('pantalla-validador'), 'mal', 'No sirve', texto);
   apuntar('validador', `Rechazado: ${texto}`, 'Cada cobro lleva un número de un solo uso; un QR viejo no responde a ninguno vivo.', 'mala');
@@ -667,6 +696,40 @@ $('atq-doble').addEventListener('click', async () => {
     apuntar('servidor', `Al reconciliar aparece la bifurcación: dos gastos distintos en el movimiento #${p.seq} de la misma cadena.`, `${p.ramaA.token.unitId} y ${p.ramaB.token.unitId} · las dos ramas firmadas por ${p.walletId}`, 'destacada');
     apuntar('servidor', `Monedero ${p.walletId} bloqueado. La pérdida sale de su saldo retenido, no del bolsillo del chofer.`, 'A los dos dueños se les paga igual: prestaron el servicio.', 'destacada');
     veredicto($('pantalla-validador'), 'aviso', 'Fraude detectado al reconciliar', `Las dos firmas son del propio ${p.walletId}. Queda bloqueado y no puede recargar más.`);
+  }
+  refrescar();
+});
+
+$('atq-directo').addEventListener('click', async () => {
+  if (mundo.maria.saldoCentimos === 0) {
+    apuntar('ataque', 'Hace falta saldo cargado para probarlo.');
+    return;
+  }
+  apuntar('ataque', 'El pasajero genera un cobro directo y le pasa la captura a un amigo que va en otra unidad, dentro de los 90 segundos.');
+
+  const directo = await mundo.maria.presentar(leerMonto('in-pasaje', 235_00));
+  if (!directo.ok) {
+    apuntar('pasajero', `No se pudo generar: ${directo.motivo}`, null, 'mala');
+    refrescar();
+    return;
+  }
+  const otroBus = await Validador.crear(mundo.servidor, {
+    validatorId: 'v-bus07', unitId: 'bus-07', ownerId: 'doña-carmen',
+    routeId: 'ruta-01', fareCentimos: mundo.bus.config.fareCentimos,
+  });
+
+  const a = await mundo.bus.aceptar(decodificarCobroDirecto(directo.qr));
+  const b = await otroBus.aceptar(decodificarCobroDirecto(directo.qr));
+  apuntar('validador', `bus-14: ${a.estado}. bus-07 con el MISMO QR: ${b.estado}. Ninguno de los dos puede saberlo sin internet.`, null, 'mala');
+
+  await mundo.servidor.subirRecibos('v-bus14', mundo.bus.recibosPendientes);
+  await mundo.servidor.subirRecibos('v-bus07', otroBus.recibosPendientes);
+  const informe = mundo.servidor.reconciliar();
+
+  if (informe.reclamosDuplicados.length > 0) {
+    const d = informe.reclamosDuplicados[informe.reclamosDuplicados.length - 1];
+    apuntar('servidor', `Al reconciliar aparecen dos recibos firmados por el mismo pago: ${d.primero.unitId} y ${d.segundo.unitId}.`, 'Se le paga al primero que lo reclamó; el segundo no cobra, y queda constancia contra ese monedero.', 'destacada');
+    veredicto($('pantalla-validador'), 'aviso', 'Cobro duplicado detectado', `Este es el precio del modo directo. Con el de dos escaneos no ocurre: pruébalo y compara.`);
   }
   refrescar();
 });

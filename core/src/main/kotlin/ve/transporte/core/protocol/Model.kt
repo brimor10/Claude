@@ -150,6 +150,70 @@ data class SignedChallenge(
 // 3. Gasto (OFFLINE): el monedero firma un pago encadenado.
 // ---------------------------------------------------------------------------
 
+/** En que modo se cobro un pago. Ver [SpendToken] y [PresentedSpendToken]. */
+enum class SpendMode {
+    /** Dos escaneos: el pago responde a un reto que el validador acaba de emitir. */
+    RETO,
+
+    /** Un escaneo: el pasajero enseña su QR y el validador lo lee. Mas rapido. */
+    PRESENTADO,
+}
+
+/**
+ * Lo que tienen en comun los dos modos de pago, para que el validador y el
+ * servidor puedan tratarlos igual: misma cadena, misma deteccion de doble
+ * gasto, misma liquidacion.
+ */
+sealed interface AnySpend {
+    val grantId: String
+    val walletId: String
+    val seq: Long
+    val amountCentimos: Long
+    val balanceAfterCentimos: Long
+    val deviceKeyFingerprint: String
+    val prevHash: ByteArray
+    val grant: SignedGrant
+    val devicePublicKey: ByteArray
+    val signature: ByteArray
+    val mode: SpendMode
+
+    /** Bytes que firma el dispositivo. */
+    fun signedBytes(): ByteArray
+
+    /**
+     * Hash del eslabon: lo que apunta el siguiente gasto de la cadena.
+     * Incluye la firma, asi que no se puede re-firmar el mismo contenido para
+     * romper el encadenamiento.
+     */
+    fun linkHash(): ByteArray = Hash.sha256(signedBytes(), signature)
+
+    /** Identidad del eslabon, para detectar bifurcaciones en el servidor. */
+    fun linkId(): String = Base64Url.encode(linkHash())
+
+    /**
+     * Codigo de viaje: cuatro cifras que el pasajero y el validador calculan
+     * por separado, cada uno de su lado, a partir de este mismo gasto.
+     *
+     * Resuelve un problema practico que la criptografia sola no resuelve: el
+     * pasajero descuenta el saldo al firmar, pero sin internet no tiene forma
+     * de saber si el aparato del chofer llego a procesar SU pago o si el
+     * escaneo fallo. Si los dos telefonos muestran el mismo numero, el pasajero
+     * sabe que el validador leyo exactamente ese pago y no otro.
+     *
+     * Es una confirmacion para el ojo humano, no una prueba: un chofer
+     * deshonesto podria enseñar el numero sin haber aceptado el cobro. La
+     * prueba de verdad es el recibo firmado que se sube al reconciliar.
+     */
+    fun tripCode(): String {
+        val h = Hash.sha256(linkHash())
+        val n = ((h[0].toInt() and 0xFF) shl 24) or
+            ((h[1].toInt() and 0xFF) shl 16) or
+            ((h[2].toInt() and 0xFF) shl 8) or
+            (h[3].toInt() and 0xFF)
+        return ((n.toLong() and 0xFFFFFFFFL) % 10_000).toString().padStart(4, '0')
+    }
+}
+
 /**
  * Vale de gasto. Firmado por la clave del dispositivo (no extraible del
  * Keystore).
@@ -205,48 +269,113 @@ data class SpendToken(
 
 data class SignedSpend(
     val token: SpendToken,
-    val signature: ByteArray,
+    override val signature: ByteArray,
     /** El vale que respalda el saldo. Va en el QR para validar 100% sin red. */
-    val grant: SignedGrant,
+    override val grant: SignedGrant,
     /** Clave publica del dispositivo del pasajero. */
-    val devicePublicKey: ByteArray,
-) {
-    /**
-     * Hash del eslabon: es lo que apunta el siguiente gasto de la cadena.
-     * Incluye la firma, asi que no se puede re-firmar el mismo contenido para
-     * romper el encadenamiento.
-     */
-    fun linkHash(): ByteArray = Hash.sha256(token.canonicalBytes(), signature)
+    override val devicePublicKey: ByteArray,
+) : AnySpend {
+    override val grantId: String get() = token.grantId
+    override val walletId: String get() = token.walletId
+    override val seq: Long get() = token.seq
+    override val amountCentimos: Long get() = token.amountCentimos
+    override val balanceAfterCentimos: Long get() = token.balanceAfterCentimos
+    override val deviceKeyFingerprint: String get() = token.deviceKeyFingerprint
+    override val prevHash: ByteArray get() = token.prevHash
+    override val mode: SpendMode get() = SpendMode.RETO
 
-    /** Identidad del eslabon para deteccion de bifurcaciones en el servidor. */
-    fun linkId(): String = Base64Url.encode(linkHash())
-
-    /**
-     * Codigo de viaje: cuatro cifras que el pasajero y el validador calculan
-     * por separado, cada uno de su lado, a partir de este mismo gasto.
-     *
-     * Resuelve un problema practico que la criptografia sola no resuelve: el
-     * pasajero descuenta el saldo al firmar, pero sin internet no tiene forma
-     * de saber si el aparato del chofer llego a procesar SU pago o si el
-     * escaneo fallo. Si los dos telefonos muestran el mismo numero, el pasajero
-     * sabe que el validador leyo exactamente ese pago y no otro.
-     *
-     * Es una confirmacion para el ojo humano, no una prueba: un chofer
-     * deshonesto podria enseñar el numero sin haber aceptado el cobro. La
-     * prueba de verdad es el recibo firmado que se sube al reconciliar. Para
-     * una confirmacion irrefutable en el momento haria falta un tercer
-     * escaneo (o NFC), a costa de tiempo en la puerta del autobus.
-     */
-    fun tripCode(): String {
-        val h = Hash.sha256(linkHash())
-        val n = ((h[0].toInt() and 0xFF) shl 24) or
-            ((h[1].toInt() and 0xFF) shl 16) or
-            ((h[2].toInt() and 0xFF) shl 8) or
-            (h[3].toInt() and 0xFF)
-        return ((n.toLong() and 0xFFFFFFFFL) % 10_000).toString().padStart(4, '0')
-    }
+    override fun signedBytes(): ByteArray = token.canonicalBytes()
 
     override fun equals(other: Any?): Boolean = other is SignedSpend &&
+        token == other.token &&
+        signature.contentEquals(other.signature) &&
+        grant == other.grant &&
+        devicePublicKey.contentEquals(other.devicePublicKey)
+
+    override fun hashCode(): Int = linkHash().contentHashCode()
+}
+
+// ---------------------------------------------------------------------------
+// 3-bis. Cobro directo (OFFLINE, UN SOLO ESCANEO).
+// ---------------------------------------------------------------------------
+
+/**
+ * Pago que el pasajero enseña sin haber visto antes al cobrador, para que el
+ * lector de la unidad lo escanee de un tiron. Es el modo rapido: un escaneo en
+ * vez de dos, que en la puerta de un autobus lleno se nota.
+ *
+ * EL COSTO, dicho sin adornos: en el modo de dos escaneos el pago va amarrado a
+ * un numero que el validador acaba de inventar, asi que una captura de pantalla
+ * no sirve jamas. Aqui ese amarre no existe, porque el telefono no sabe todavia
+ * a que unidad le va a pagar. En su lugar el pago vale solo dentro de una
+ * VENTANA DE TIEMPO corta ([validFromEpochSec] + [windowSeconds]), que el
+ * validador comprueba contra su propio reloj.
+ *
+ * Que se pierde exactamente: dentro de esa ventana, el mismo QR mostrado en DOS
+ * unidades distintas cuela las dos veces. Ese fraude queda acotado a la ventana
+ * y a un pasaje, y se detecta al reconciliar (dos recibos firmados apuntando al
+ * mismo eslabon), pero ocurre. En el modo de dos escaneos, no.
+ *
+ * Lo que NO se pierde: sigue sin poderse inventar saldo, sigue sin poder usarse
+ * el saldo de otro telefono, y el doble gasto por restauracion de respaldo
+ * sigue produciendo una bifurcacion demostrable, porque la cadena es la misma.
+ *
+ * Tampoco lleva unidad ni dueño: el telefono no los conoce. Quien cobra lo
+ * declara firmando el recibo ([SignedReceipt]).
+ */
+data class PresentedSpendToken(
+    val grantId: String,
+    val walletId: String,
+    val seq: Long,
+    val amountCentimos: Long,
+    val balanceAfterCentimos: Long,
+    val prevHash: ByteArray,
+    /** Inicio de la ventana de validez, segun el reloj del telefono. */
+    val validFromEpochSec: Long,
+    val windowSeconds: Int,
+    /** Hace unico cada QR aunque los demas campos coincidan. */
+    val nonce: String,
+    val deviceKeyFingerprint: String,
+) {
+    fun canonicalBytes(): ByteArray = CanonicalWriter(CanonicalWriter.TAG_PRESENTED)
+        .str(grantId)
+        .str(walletId)
+        .long(seq)
+        .long(amountCentimos)
+        .long(balanceAfterCentimos)
+        .bytes(prevHash)
+        .long(validFromEpochSec)
+        .int(windowSeconds)
+        .str(nonce)
+        .str(deviceKeyFingerprint)
+        .build()
+
+    fun expiresAtEpochSec(): Long = validFromEpochSec + windowSeconds
+
+    override fun equals(other: Any?): Boolean = other is PresentedSpendToken &&
+        canonicalBytes().contentEquals(other.canonicalBytes())
+
+    override fun hashCode(): Int = canonicalBytes().contentHashCode()
+}
+
+data class SignedPresentedSpend(
+    val token: PresentedSpendToken,
+    override val signature: ByteArray,
+    override val grant: SignedGrant,
+    override val devicePublicKey: ByteArray,
+) : AnySpend {
+    override val grantId: String get() = token.grantId
+    override val walletId: String get() = token.walletId
+    override val seq: Long get() = token.seq
+    override val amountCentimos: Long get() = token.amountCentimos
+    override val balanceAfterCentimos: Long get() = token.balanceAfterCentimos
+    override val deviceKeyFingerprint: String get() = token.deviceKeyFingerprint
+    override val prevHash: ByteArray get() = token.prevHash
+    override val mode: SpendMode get() = SpendMode.PRESENTADO
+
+    override fun signedBytes(): ByteArray = token.canonicalBytes()
+
+    override fun equals(other: Any?): Boolean = other is SignedPresentedSpend &&
         token == other.token &&
         signature.contentEquals(other.signature) &&
         grant == other.grant &&
@@ -259,15 +388,63 @@ data class SignedSpend(
 // 4. Recibo del validador: lo que se sube para liquidar en bolivares.
 // ---------------------------------------------------------------------------
 
-data class ValidatorReceipt(
-    val receiptId: String,
-    val spend: SignedSpend,
+/**
+ * Lo que el validador declara y FIRMA al aceptar un pago.
+ *
+ * Importa por dos razones. En el modo de cobro directo el pago del pasajero no
+ * dice a que unidad va, porque el telefono no lo sabia: quien cobra tiene que
+ * declararlo, y firmarlo es lo que impide que otro reclame ese dinero. Y en los
+ * dos modos, permite al servidor comprobar quien cobro cada pasaje sin fiarse
+ * del canal por el que se subio.
+ */
+data class ReceiptClaim(
+    /** Eslabon de la cadena que se esta cobrando. */
+    val linkId: String,
     val validatorId: String,
     val unitId: String,
     val ownerId: String,
+    val routeId: String,
+    val amountCentimos: Long,
     val acceptedAtEpochSec: Long,
+    val mode: SpendMode,
 ) {
-    val amountCentimos: Long get() = spend.token.amountCentimos
+    fun canonicalBytes(): ByteArray = CanonicalWriter(CanonicalWriter.TAG_RECEIPT)
+        .str(linkId)
+        .str(validatorId)
+        .str(unitId)
+        .str(ownerId)
+        .str(routeId)
+        .long(amountCentimos)
+        .long(acceptedAtEpochSec)
+        .str(mode.name)
+        .build()
+}
+
+data class SignedReceipt(
+    val claim: ReceiptClaim,
+    val signature: ByteArray,
+    /** Clave publica del validador, la misma que acredita su certificado. */
+    val validatorPublicKey: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean = other is SignedReceipt &&
+        claim == other.claim &&
+        signature.contentEquals(other.signature) &&
+        validatorPublicKey.contentEquals(other.validatorPublicKey)
+
+    override fun hashCode(): Int = 31 * claim.hashCode() + signature.contentHashCode()
+}
+
+/** Un cobro completo: el pago del pasajero mas el recibo firmado del validador. */
+data class ValidatorReceipt(
+    val spend: AnySpend,
+    val receipt: SignedReceipt,
+) {
+    val receiptId: String get() = receipt.claim.linkId
+    val amountCentimos: Long get() = spend.amountCentimos
+    val validatorId: String get() = receipt.claim.validatorId
+    val unitId: String get() = receipt.claim.unitId
+    val ownerId: String get() = receipt.claim.ownerId
+    val acceptedAtEpochSec: Long get() = receipt.claim.acceptedAtEpochSec
 }
 
 // ---------------------------------------------------------------------------

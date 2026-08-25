@@ -47,7 +47,12 @@ export const TAG = {
   CHALLENGE: 'validator-challenge',
   SPEND: 'spend-token',
   VALIDATOR_CERT: 'validator-cert',
+  PRESENTED: 'presented-spend',
+  RECEIPT: 'validator-receipt',
 };
+
+/** Los dos modos de cobro. Ver bytesDelCobroDirecto para lo que implica cada uno. */
+export const MODO = { RETO: 'RETO', DIRECTO: 'PRESENTADO' };
 
 /**
  * Escritor de campos con prefijo de longitud. Es el mismo formato que usa
@@ -245,7 +250,43 @@ export const bytesDelGasto = (t) => new Escritor(TAG.SPEND)
   .str(t.challengeNonce).long(t.spentAtEpochSec).str(t.deviceKeyFingerprint)
   .build();
 
-export const hashDelEslabon = (gasto) => sha256(bytesDelGasto(gasto.token), gasto.signature);
+/**
+ * Bytes que firma el telefono, segun el modo de cobro.
+ *
+ * Cada modo tiene su propia etiqueta de dominio, asi que una firma de un modo
+ * jamas puede reinterpretarse como valida en el otro.
+ */
+export const bytesFirmados = (gasto) =>
+  gasto.modo === MODO.DIRECTO ? bytesDelCobroDirecto(gasto.token) : bytesDelGasto(gasto.token);
+
+/**
+ * Cobro directo: el pasajero enseña su QR sin haber visto al cobrador, para que
+ * el lector de la unidad lo escanee de un tiron. Un escaneo en vez de dos.
+ *
+ * EL COSTO: en el modo de dos escaneos el pago va amarrado a un numero que el
+ * validador acaba de inventar, asi que una captura de pantalla no sirve jamas.
+ * Aqui ese amarre no existe, porque el telefono todavia no sabe a que unidad le
+ * paga. En su lugar el pago vale solo dentro de una ventana de tiempo corta.
+ * Dentro de esa ventana, el mismo QR mostrado en dos unidades cuela las dos
+ * veces; se detecta al reconciliar, pero ocurre.
+ *
+ * Tampoco lleva unidad ni dueño: quien cobra lo declara firmando el recibo.
+ */
+export const bytesDelCobroDirecto = (t) => new Escritor(TAG.PRESENTED)
+  .str(t.grantId).str(t.walletId).long(t.seq)
+  .long(t.amountCentimos).long(t.balanceAfterCentimos)
+  .bytes(t.prevHash)
+  .long(t.validFromEpochSec).int(t.windowSeconds).str(t.nonce)
+  .str(t.deviceKeyFingerprint)
+  .build();
+
+/** Lo que el validador declara y firma al aceptar un pago. */
+export const bytesDelRecibo = (c) => new Escritor(TAG.RECEIPT)
+  .str(c.linkId).str(c.validatorId).str(c.unitId).str(c.ownerId).str(c.routeId)
+  .long(c.amountCentimos).long(c.acceptedAtEpochSec).str(c.mode)
+  .build();
+
+export const hashDelEslabon = (gasto) => sha256(bytesFirmados(gasto), gasto.signature);
 export const idDelEslabon = async (gasto) => b64urlEncode(await hashDelEslabon(gasto));
 
 /**
@@ -266,7 +307,7 @@ export async function codigoDeViaje(gasto) {
 // --- Codificacion de los QR -------------------------------------------------------
 
 const PREFIJO = 'PP1';
-export const TIPO = { RETO: 'CHL', GASTO: 'SPD', VALE: 'GRT' };
+export const TIPO = { RETO: 'CHL', GASTO: 'SPD', VALE: 'GRT', DIRECTO: 'PRS' };
 
 const envolver = (tipo, trama) => `${PREFIJO}:${tipo}:${b64urlEncode(trama)}`;
 
@@ -345,6 +386,54 @@ export function codificarGasto(firmado) {
   return envolver(TIPO.GASTO, trama);
 }
 
+export function codificarCobroDirecto(firmado) {
+  const t = firmado.token;
+  const g = firmado.grant.grant;
+  const trama = new Escritor()
+    .str(g.grantId).str(g.walletId).str(g.deviceKeyFingerprint)
+    .long(g.amountCentimos).str(g.currency)
+    .long(g.issuedAtEpochSec).long(g.expiresAtEpochSec)
+    .long(g.offlineSpendCapCentimos).int(g.offlineTripCap)
+    .str(g.issuerKeyId).str(g.nonce).bytes(firmado.grant.signature)
+    .long(t.seq).long(t.amountCentimos).long(t.balanceAfterCentimos)
+    .bytes(t.prevHash)
+    .long(t.validFromEpochSec).int(t.windowSeconds).str(t.nonce)
+    .bytes(firmado.signature).bytes(firmado.devicePublicKey)
+    .build();
+  return envolver(TIPO.DIRECTO, trama);
+}
+
+export function decodificarCobroDirecto(texto) {
+  const r = new Lector(desenvolver(texto, TIPO.DIRECTO));
+  const grant = {
+    grantId: r.str(), walletId: r.str(), deviceKeyFingerprint: r.str(),
+    amountCentimos: r.long(), currency: r.str(),
+    issuedAtEpochSec: r.long(), expiresAtEpochSec: r.long(),
+    offlineSpendCapCentimos: r.long(), offlineTripCap: r.int(),
+    issuerKeyId: r.str(), nonce: r.str(),
+  };
+  const grantSignature = r.bytes();
+  const token = {
+    grantId: grant.grantId,
+    walletId: grant.walletId,
+    seq: r.long(),
+    amountCentimos: r.long(),
+    balanceAfterCentimos: r.long(),
+    prevHash: r.bytes(),
+    validFromEpochSec: r.long(),
+    windowSeconds: r.int(),
+    nonce: r.str(),
+    deviceKeyFingerprint: grant.deviceKeyFingerprint,
+  };
+  const signature = r.bytes();
+  const devicePublicKey = r.bytes();
+  r.end();
+  return {
+    modo: MODO.DIRECTO, token, signature,
+    grant: { grant, signature: grantSignature }, devicePublicKey,
+  };
+}
+
 export function decodificarGasto(texto) {
   const r = new Lector(desenvolver(texto, TIPO.GASTO));
   const grant = {
@@ -370,7 +459,10 @@ export function decodificarGasto(texto) {
   const signature = r.bytes();
   const devicePublicKey = r.bytes();
   r.end();
-  return { token, signature, grant: { grant, signature: grantSignature }, devicePublicKey };
+  return {
+    modo: MODO.RETO, token, signature,
+    grant: { grant, signature: grantSignature }, devicePublicKey,
+  };
 }
 
 export { concat, bytesEqual, Escritor, Lector };

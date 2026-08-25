@@ -53,6 +53,7 @@ class World(
         routeId: String = "ruta-01",
         fareCentimos: Long = 5_00,
         ttlSeconds: Int = 45,
+        acceptPresented: Boolean = true,
     ): OfflineValidator {
         val signer = JvmSigner.generate("val-$unitId")
         val validatorId = "v-$unitId"
@@ -66,6 +67,7 @@ class World(
                 routeId = routeId,
                 fareCentimos = fareCentimos,
                 challengeTtlSeconds = ttlSeconds,
+                acceptPresented = acceptPresented,
             ),
             signer = signer,
             cert = cert,

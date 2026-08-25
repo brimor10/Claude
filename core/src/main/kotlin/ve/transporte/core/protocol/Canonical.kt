@@ -55,5 +55,6 @@ class CanonicalWriter(domainTag: String) {
         const val TAG_SPEND = "spend-token"
         const val TAG_RECEIPT = "validator-receipt"
         const val TAG_VALIDATOR_CERT = "validator-cert"
+        const val TAG_PRESENTED = "presented-spend"
     }
 }

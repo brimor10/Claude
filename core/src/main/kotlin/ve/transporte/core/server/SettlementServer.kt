@@ -5,10 +5,14 @@ import ve.transporte.core.crypto.Clock
 import ve.transporte.core.crypto.Ec
 import ve.transporte.core.crypto.Hash
 import ve.transporte.core.crypto.Signer
+import ve.transporte.core.protocol.AnySpend
 import ve.transporte.core.protocol.Money
 import ve.transporte.core.protocol.PurseGrant
+import ve.transporte.core.protocol.ReceiptClaim
 import ve.transporte.core.protocol.SignedGrant
+import ve.transporte.core.protocol.SignedPresentedSpend
 import ve.transporte.core.protocol.SignedSpend
+import ve.transporte.core.protocol.SpendMode
 import ve.transporte.core.protocol.SignedValidatorCert
 import ve.transporte.core.protocol.ValidatorCert
 import ve.transporte.core.protocol.ValidatorReceipt
@@ -20,11 +24,29 @@ data class IssuancePolicy(
     val validatorCertValiditySeconds: Long = 365L * 24 * 3600,
     /** Tope de gasto sin sincronizar, como fraccion del monto recargado. */
     val offlineCapFraction: Double = 1.0,
-    /** Tope absoluto de gasto offline, gane el que sea menor. */
-    val offlineCapCeilingCentimos: Long = 200_00,
+    /**
+     * Tope absoluto de gasto sin sincronizar, gane el que sea menor.
+     *
+     * Es la PERDIDA MAXIMA que puede causar un telefono comprometido antes de
+     * que el sistema lo bloquee. Por defecto, unos diez pasajes de 235 Bs.
+     *
+     * Ojo al ajustarlo: si queda por debajo de un pasaje, nadie puede pagar sin
+     * señal y el sistema no sirve para lo que se hizo.
+     */
+    val offlineCapCeilingCentimos: Long = 2_350_00,
     val offlineTripCap: Int = 30,
     /** Comision del operador, en puntos basicos (100 pb = 1 %). */
     val commissionBasisPoints: Int = 300,
+    /**
+     * Cuanto se espera, tras vencer la ventana de un cobro directo, antes de
+     * devolverle el dinero al pasajero si ningun validador lo reclamo.
+     *
+     * En el modo directo el telefono descuenta al generar el QR, sin saber si
+     * alguien llego a leerlo. Si el escaneo fallo, o el pasajero se arrepintio,
+     * ese dinero tiene que volver. La espera existe porque el validador puede
+     * tardar en tener señal para subir su recibo.
+     */
+    val refundGraceSeconds: Long = 24 * 3600,
 )
 
 data class WalletAccount(
@@ -53,14 +75,32 @@ data class DoubleSpendEvidence(
     val walletId: String,
     val grantId: String,
     val seq: Long,
-    val branchA: SignedSpend,
-    val branchB: SignedSpend,
+    val branchA: AnySpend,
+    val branchB: AnySpend,
 ) {
     /** Ambas ramas van firmadas por el propio usuario. No hay como negarlo. */
     fun humanSummary(): String =
         "Monedero $walletId gasto dos veces el movimiento #$seq del vale $grantId: " +
-            "${Money.format(branchA.token.amountCentimos)} en ${branchA.token.unitId} y " +
-            "${Money.format(branchB.token.amountCentimos)} en ${branchB.token.unitId}."
+            "${Money.format(branchA.amountCentimos)} y ${Money.format(branchB.amountCentimos)}, " +
+            "en dos cobros distintos."
+}
+
+/**
+ * Un mismo pago reclamado por dos unidades distintas.
+ *
+ * Es el precio del modo de cobro directo: dentro de la ventana de validez, la
+ * misma captura de pantalla puede colar en dos unidades. Se paga al primero que
+ * lo reclamo y queda constancia contra ese monedero.
+ */
+data class DuplicateClaim(
+    val linkId: String,
+    val walletId: String,
+    val primero: ReceiptClaim,
+    val segundo: ReceiptClaim,
+) {
+    fun humanSummary(): String =
+        "El pago $linkId del monedero $walletId lo reclamaron ${primero.unitId} y ${segundo.unitId}; " +
+            "se le paga a ${primero.unitId}."
 }
 
 data class ChainIssue(val grantId: String, val seq: Long, val problem: String)
@@ -72,6 +112,11 @@ data class ReconciliationReport(
     val newlyBlockedWallets: List<String>,
     /** Perdida no cubierta por el saldo del pasajero (la asume la reserva de fraude). */
     val uncoveredCentimos: Long,
+    /** Un mismo pago reclamado por dos unidades. */
+    val duplicateClaims: List<DuplicateClaim> = emptyList(),
+    /** Cobros directos que nadie reclamo: se le devuelven al pasajero. */
+    val refundedLinkIds: List<String> = emptyList(),
+    val refundedCentimos: Long = 0,
 )
 
 data class OwnerSettlement(
@@ -87,7 +132,7 @@ data class OwnerSettlement(
 }
 
 private class LedgerEntry(
-    val spend: SignedSpend,
+    val spend: AnySpend,
     val sources: MutableSet<String> = mutableSetOf(),
 )
 
@@ -110,6 +155,9 @@ class SettlementServer(
     val issuerPublicKey: ByteArray get() = issuer.publicKeyEncoded
 
     private val accounts = HashMap<String, WalletAccount>()
+
+    /** Clave publica de cada validador dado de alta, para verificar sus recibos. */
+    private val validatorKeys = HashMap<String, ByteArray>()
     private val purses = HashMap<String, Purse>()
 
     /** (grantId#seq) -> primer gasto visto para esa posicion de la cadena. */
@@ -118,6 +166,19 @@ class SettlementServer(
     private val _doubleSpends = mutableListOf<DoubleSpendEvidence>()
     private val _chainIssues = mutableListOf<ChainIssue>()
     private val unsettledReceipts = LinkedHashMap<String, ValidatorReceipt>()
+
+    /** Primer recibo visto por cada eslabon, para detectar reclamos duplicados. */
+    private val claimsByLink = LinkedHashMap<String, ValidatorReceipt>()
+
+    private val _duplicateClaims = mutableListOf<DuplicateClaim>()
+    private val _rejectedReceipts = mutableListOf<Pair<String, String>>()
+    private val refundedLinks = HashSet<String>()
+
+    /** Un mismo pago reclamado por dos unidades distintas. */
+    val duplicateClaims: List<DuplicateClaim> get() = _duplicateClaims.toList()
+
+    /** Recibos que no se pudieron aceptar, con el motivo. */
+    val rejectedReceipts: List<Pair<String, String>> get() = _rejectedReceipts.toList()
     private val settledReceiptIds = HashSet<String>()
 
     val doubleSpends: List<DoubleSpendEvidence> get() = _doubleSpends.toList()
@@ -150,6 +211,7 @@ class SettlementServer(
             expiresAtEpochSec = now + policy.validatorCertValiditySeconds,
             issuerKeyId = issuer.keyId,
         )
+        validatorKeys[validatorId] = validatorPublicKey
         return SignedValidatorCert(cert, issuer.sign(cert.canonicalBytes()))
     }
 
@@ -197,11 +259,58 @@ class SettlementServer(
 
     // -- Subida de datos -----------------------------------------------------
 
-    /** El validador sube sus recibos al reconectar. Esto es lo que genera el cobro. */
+    /**
+     * El validador sube sus recibos al reconectar. Esto es lo que genera el cobro.
+     *
+     * Cada recibo va firmado por el validador que lo emitio, asi que el servidor
+     * no tiene que fiarse del canal: comprueba con la clave publica que registro
+     * al darlo de alta. Sin eso, en el modo de cobro directo cualquiera podria
+     * reclamar el pago de otro, porque el pago del pasajero no dice a que unidad
+     * va.
+     */
     fun ingestValidatorBatch(validatorId: String, receipts: List<ValidatorReceipt>): List<String> {
         val accepted = mutableListOf<String>()
         for (r in receipts) {
-            record(r.spend, source = "validator:$validatorId")
+            val claim = r.receipt.claim
+            val key = validatorKeys[claim.validatorId]
+            if (key == null || !key.contentEquals(r.receipt.validatorPublicKey)) {
+                _rejectedReceipts += r.receiptId to "validador no registrado: ${claim.validatorId}"
+                continue
+            }
+            val ok = try {
+                Ec.verify(
+                    Ec.decodePublicKey(r.receipt.validatorPublicKey),
+                    claim.canonicalBytes(),
+                    r.receipt.signature,
+                )
+            } catch (_: Exception) {
+                false
+            }
+            if (!ok) {
+                _rejectedReceipts += r.receiptId to "firma del recibo invalida"
+                continue
+            }
+            if (claim.linkId != r.spend.linkId() || claim.amountCentimos != r.spend.amountCentimos) {
+                _rejectedReceipts += r.receiptId to "el recibo no corresponde al pago que acompaña"
+                continue
+            }
+
+            // Un mismo pago reclamado por DOS unidades: en el modo directo puede
+            // pasar si el pasajero enseño el mismo QR en dos sitios dentro de la
+            // ventana. Se paga al primero que lo reclamo y se deja constancia.
+            val previo = claimsByLink[claim.linkId]
+            if (previo != null && previo.receipt.claim.validatorId != claim.validatorId) {
+                _duplicateClaims += DuplicateClaim(
+                    linkId = claim.linkId,
+                    walletId = r.spend.walletId,
+                    primero = previo.receipt.claim,
+                    segundo = claim,
+                )
+                continue
+            }
+
+            record(r.spend, source = "validator:${claim.validatorId}")
+            claimsByLink.putIfAbsent(claim.linkId, r)
             if (r.receiptId !in settledReceiptIds) {
                 unsettledReceipts[r.receiptId] = r
             }
@@ -211,22 +320,19 @@ class SettlementServer(
     }
 
     /** El pasajero sube sus gastos pendientes al reconectar. */
-    fun ingestWalletSync(walletId: String, spends: List<SignedSpend>): SyncAck {
+    fun ingestWalletSync(walletId: String, spends: List<AnySpend>): SyncAck {
         val confirmed = mutableListOf<String>()
         for (s in spends) {
-            if (s.token.walletId != walletId) continue
+            if (s.walletId != walletId) continue
             record(s, source = "wallet:$walletId")
             confirmed += s.linkId()
         }
-        val authoritative = spends.firstOrNull()?.token?.grantId?.let { grantId ->
-            ledger.entries
-                .filter { it.value.spend.token.grantId == grantId }
-                .sumOf { it.value.spend.token.amountCentimos }
-        }
+        val authoritative = spends.firstOrNull()?.grantId?.let { grantId -> gastadoReal(grantId) }
         return SyncAck(
             confirmedLinkIds = confirmed,
             serverTimeEpochSec = clock.nowEpochSec(),
             authoritativeSpentCentimos = authoritative,
+            refundedLinkIds = spends.map { it.linkId() }.filter { it in refundedLinks },
         )
     }
 
@@ -237,9 +343,8 @@ class SettlementServer(
      * en la misma posicion (grantId, seq) de la cadena, es doble gasto, y las
      * dos firmas del propio usuario son la prueba.
      */
-    private fun record(spend: SignedSpend, source: String) {
-        val t = spend.token
-        val key = "${t.grantId}#${t.seq}"
+    private fun record(spend: AnySpend, source: String) {
+        val key = "${spend.grantId}#${spend.seq}"
         val existing = ledger[key]
         if (existing == null) {
             ledger[key] = LedgerEntry(spend, mutableSetOf(source))
@@ -247,12 +352,12 @@ class SettlementServer(
         }
         existing.sources += source
         if (existing.spend.linkId() != spend.linkId()) {
-            val already = _doubleSpends.any { it.grantId == t.grantId && it.seq == t.seq }
+            val already = _doubleSpends.any { it.grantId == spend.grantId && it.seq == spend.seq }
             if (!already) {
                 _doubleSpends += DoubleSpendEvidence(
-                    walletId = t.walletId,
-                    grantId = t.grantId,
-                    seq = t.seq,
+                    walletId = spend.walletId,
+                    grantId = spend.grantId,
+                    seq = spend.seq,
                     branchA = existing.spend,
                     branchB = spend,
                 )
@@ -270,7 +375,7 @@ class SettlementServer(
         _chainIssues.clear()
         val blocked = mutableListOf<String>()
 
-        val byGrant = ledger.values.groupBy { it.spend.token.grantId }
+        val byGrant = ledger.values.groupBy { it.spend.grantId }
         for ((grantId, entries) in byGrant) {
             val purse = purses[grantId]
             if (purse == null) {
@@ -278,39 +383,38 @@ class SettlementServer(
                 continue
             }
 
-            val ordered = entries.map { it.spend }.sortedBy { it.token.seq }
+            val ordered = entries.map { it.spend }.sortedBy { it.seq }
             var expectedSeq = 1L
             var prevHash = Hash.ZERO_32
             var continuityKnown = true
             var running = 0L
 
             for (spend in ordered) {
-                val t = spend.token
-                if (t.seq != expectedSeq) {
+                if (spend.seq != expectedSeq) {
                     // Un hueco no es fraude por si solo: puede ser un gasto que
                     // el pasajero aun no ha subido. Pero rompe la verificacion
                     // del encadenamiento hasta el siguiente eslabon conocido.
                     _chainIssues += ChainIssue(
                         grantId, expectedSeq,
-                        "falta el movimiento #$expectedSeq (el siguiente subido es #${t.seq})",
+                        "falta el movimiento #$expectedSeq (el siguiente subido es #${spend.seq})",
                     )
                     continuityKnown = false
                 }
-                if (continuityKnown && !t.prevHash.contentEquals(prevHash)) {
-                    _chainIssues += ChainIssue(grantId, t.seq, "el eslabon no apunta al anterior")
+                if (continuityKnown && !spend.prevHash.contentEquals(prevHash)) {
+                    _chainIssues += ChainIssue(grantId, spend.seq, "el eslabon no apunta al anterior")
                 }
-                running += t.amountCentimos
-                if (continuityKnown && t.balanceAfterCentimos != purse.amountCentimos - running) {
+                running += spend.amountCentimos
+                if (continuityKnown && spend.balanceAfterCentimos != purse.amountCentimos - running) {
                     _chainIssues += ChainIssue(
-                        grantId, t.seq,
-                        "saldo declarado ${Money.format(t.balanceAfterCentimos)} != " +
+                        grantId, spend.seq,
+                        "saldo declarado ${Money.format(spend.balanceAfterCentimos)} != " +
                             Money.format(purse.amountCentimos - running),
                     )
                 }
                 // Tras un hueco se retoma la verificacion desde este eslabon.
                 prevHash = spend.linkHash()
                 continuityKnown = true
-                expectedSeq = t.seq + 1
+                expectedSeq = spend.seq + 1
             }
             purse.settledSpentCentimos = running
         }
@@ -324,7 +428,7 @@ class SettlementServer(
             }
             // Las dos ramas se pagan al dueno (el chofer si presto el servicio);
             // la rama duplicada es la perdida, que se le carga al pasajero.
-            val loss = evidence.branchB.token.amountCentimos
+            val loss = evidence.branchB.amountCentimos
             val purse = purses[evidence.grantId]
             val fromEscrow = minOf(loss, purse?.escrowCentimos ?: 0)
             purse?.let { it.escrowCentimos -= fromEscrow }
@@ -333,14 +437,51 @@ class SettlementServer(
             uncovered += remaining
         }
 
+        val devueltos = devolverCobrosNoReclamados()
+
         return ReconciliationReport(
             processedSpends = ledger.size,
             doubleSpends = _doubleSpends.toList(),
             chainIssues = _chainIssues.toList(),
             newlyBlockedWallets = blocked,
             uncoveredCentimos = uncovered,
+            duplicateClaims = _duplicateClaims.toList(),
+            refundedLinkIds = devueltos.map { it.linkId() },
+            refundedCentimos = devueltos.sumOf { it.amountCentimos },
         )
     }
+
+    /**
+     * Devuelve el dinero de los cobros directos que ningun validador reclamo.
+     *
+     * En el modo directo el telefono descuenta al generar el QR, sin poder saber
+     * si alguien llego a leerlo. Si el escaneo fallo, o el pasajero cambio de
+     * idea, ese dinero tiene que volver. Se espera [IssuancePolicy.refundGraceSeconds]
+     * desde que vencio la ventana, porque el validador puede tardar en subir su
+     * recibo.
+     */
+    private fun devolverCobrosNoReclamados(): List<AnySpend> {
+        val now = clock.nowEpochSec()
+        val devueltos = mutableListOf<AnySpend>()
+        for (entry in ledger.values) {
+            val spend = entry.spend
+            if (spend !is SignedPresentedSpend) continue
+            val linkId = spend.linkId()
+            if (linkId in refundedLinks || claimsByLink.containsKey(linkId)) continue
+            if (now < spend.token.expiresAtEpochSec() + policy.refundGraceSeconds) continue
+            refundedLinks += linkId
+            devueltos += spend
+        }
+        return devueltos
+    }
+
+    /**
+     * Lo que de verdad se ha gastado de un vale: todo lo registrado menos lo
+     * devuelto. Es la cifra que manda sobre el saldo que muestra el telefono.
+     */
+    private fun gastadoReal(grantId: String): Long = ledger.values
+        .filter { it.spend.grantId == grantId && it.spend.linkId() !in refundedLinks }
+        .sumOf { it.spend.amountCentimos }
 
     /** Lista negra que se distribuye a los validadores en cada sincronizacion. */
     fun hotlist(): Set<String> = accounts.values.filter { it.blocked }.map { it.walletId }.toSet()
@@ -366,7 +507,7 @@ class SettlementServer(
         mine.forEach {
             unsettledReceipts.remove(it.receiptId)
             settledReceiptIds += it.receiptId
-            purses[it.spend.token.grantId]?.let { p ->
+            purses[it.spend.grantId]?.let { p ->
                 p.escrowCentimos = (p.escrowCentimos - it.amountCentimos).coerceAtLeast(0)
             }
         }

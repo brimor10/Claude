@@ -15,6 +15,7 @@ import ve.transporte.core.protocol.Money
 import ve.transporte.core.qr.QrEnvelope
 import ve.transporte.core.qr.QrFormatException
 import ve.transporte.core.wallet.OfflineWallet
+import ve.transporte.core.wallet.PresentOutcome
 import ve.transporte.core.wallet.SpendOutcome
 import ve.transporte.core.wallet.WalletBook
 import ve.transporte.panapago.AppContainer
@@ -32,6 +33,9 @@ data class PassengerUiState(
     val lastPaidCentimos: Long? = null,
     /** Cuatro cifras que tienen que coincidir con las de la pantalla del cobrador. */
     val tripCode: String? = null,
+    /** true si el QR que se muestra es de cobro directo (un solo escaneo). */
+    val paymentIsDirect: Boolean = false,
+    val fareCentimos: Long = 235_00,
     val scanning: Boolean = false,
     val busy: Boolean = false,
     val message: String? = null,
@@ -110,6 +114,36 @@ class PassengerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Modo de cobro directo: muestra el QR sin escanear nada, para que lo lea el
+     * lector de la unidad. Un escaneo en vez de dos.
+     *
+     * Es mas rapido en la puerta, pero mas debil contra la repeticion: el pago
+     * solo esta amarrado a una ventana de tiempo corta, no a un cobro concreto.
+     * Y el saldo se descuenta al generarlo; si nadie lo lee, el servidor lo
+     * devuelve al reconciliar.
+     */
+    fun showDirectPayment() {
+        when (val outcome = book.present(prefs.fareCentimos)) {
+            is PresentOutcome.Approved -> {
+                persist()
+                _state.update {
+                    it.copy(
+                        paymentQr = outcome.qr,
+                        paymentIsDirect = true,
+                        lastPaidCentimos = outcome.spend.amountCentimos,
+                        tripCode = outcome.spend.tripCode(),
+                        message = "Enséñale este QR al lector. Vale 90 segundos.",
+                    )
+                }
+                refresh()
+            }
+
+            is PresentOutcome.Denied ->
+                _state.update { it.copy(error = "${humanize(outcome.reason)} — ${outcome.detail}") }
+        }
+    }
+
     fun startScanning() {
         _state.update { it.copy(scanning = true, paymentQr = null, error = null, message = null) }
     }
@@ -133,6 +167,7 @@ class PassengerViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         scanning = false,
                         paymentQr = outcome.qr,
+                        paymentIsDirect = false,
                         lastPaidCentimos = outcome.spend.token.amountCentimos,
                         tripCode = outcome.spend.tripCode(),
                         message = "Pagado ${Money.format(outcome.spend.token.amountCentimos)}. " +
@@ -155,7 +190,7 @@ class PassengerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun sync() = launchBusy {
         val walletId = prefs.walletId ?: return@launchBusy
-        val pending = book.pendingSpends
+        val pending = book.pendingAll
         if (pending.isEmpty()) {
             _state.update { it.copy(message = "No hay nada que sincronizar") }
             return@launchBusy
@@ -182,7 +217,8 @@ class PassengerViewModel(app: Application) : AndroidViewModel(app) {
                 walletId = prefs.walletId,
                 balanceCentimos = book.totalBalanceCentimos,
                 offlineSpendableCentimos = book.offlineSpendableCentimos,
-                pendingCount = book.pendingSpends.size,
+                pendingCount = book.pendingAll.size,
+                fareCentimos = prefs.fareCentimos,
             )
         }
     }
